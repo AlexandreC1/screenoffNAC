@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        Diag.init(this)
         Graph.init(this)
         Notifier.createChannels(this)
         // Leftovers from a crash: drop index rows whose file is gone, and unplayable staging files.

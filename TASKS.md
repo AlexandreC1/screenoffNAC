@@ -92,6 +92,12 @@ Acceptance (owner): phone on a shelf in motion mode, nothing recorded for 5 quie
 
 Newest entry first. Format is in `AGENTS.md` section 10.
 
+### 2026-11-11 (later), Claude, ENGINE
+Owner report: motion mode never records on his phone. Continuous recording worked.
+Likely cause: the phone takes the combined path (video + analysis bound together), which the emulators never exercise because their cameras force the split fallback.
+Changes: detector removes the shared exposure shift (median difference) before counting changed cells, the lighting rule now needs 85 percent of cells instead of 60, default sensitivity mapping is a little more sensitive. 4 new unit tests (30 total). Watchdog: armed in combined mode with no analysis image for 4 s switches to split mode. Live meter on Home and in the notification. `Diag` log file, shareable from Settings. Emulator test now fails if motion mode gets no images or never detects motion.
+Not verified: the fix on the owner's phone. Ask for the meter reading and a Share diagnostics file if it still fails.
+
 ### 2026-11-11, Claude (chat session), ENGINE + CONTRACT
 Done: T-002 (CI green on the first compile), T-044 (motion fallback: analysis alone while armed, video alone while recording, used when the camera cannot bind both). CI now has three jobs: build, smoke (emulator, API 31 and 36), publish.
 Verified on emulators by `scripts/smoke.sh`: install, open the UI, start through `TriggerActivity`, record 70 s with the screen off, two rotations at 30 s, stop, three playable-size clips in the index, staging empty, then motion mode (split fallback path) producing clips, no crash, no error notification.

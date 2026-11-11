@@ -118,6 +118,21 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             )
         }
 
+        if (status.mode == RecMode.MOTION && (status.state == RecState.ARMED || status.state == RecState.RECORDING)) {
+            Text(
+                text = if (status.motionFrames == 0) {
+                    "Waiting for camera images"
+                } else {
+                    "Movement ${status.motionChanged} of ${status.motionNeeded} needed. Camera images: ${status.motionFrames}"
+                },
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                "Wave a hand in front of the camera: the first number should jump above the second.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
         val error = status.lastError
         if (error != null) {
             Text(

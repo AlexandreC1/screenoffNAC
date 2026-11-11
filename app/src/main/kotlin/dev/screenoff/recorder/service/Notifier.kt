@@ -52,6 +52,12 @@ object Notifier {
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openApp(context))
             .addAction(0, context.getString(R.string.action_stop), servicePending(context, Actions.STOP, 10))
+        if (status.state == RecState.ARMED) {
+            builder.setContentText(
+                if (status.motionFrames == 0) context.getString(R.string.notif_waiting_images)
+                else context.getString(R.string.notif_meter, status.motionChanged, status.motionNeeded)
+            )
+        }
         if (status.state == RecState.RECORDING) {
             if (currentLocked) builder.setContentText(context.getString(R.string.notif_clip_kept))
             else builder.addAction(0, context.getString(R.string.action_keep), servicePending(context, Actions.LOCK_CURRENT, 11))

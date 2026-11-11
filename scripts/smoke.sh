@@ -88,6 +88,10 @@ trigger START_MOTION
 wait_fg || fail "recorder service is not in the foreground in motion mode"
 sleep 40
 svc | grep -q "isForeground=true" || fail "recorder service died in motion mode"
+LAST_STATS=$(adb logcat -d -s ScreenOff:V | grep "motion stats" | tail -1)
+echo "$LAST_STATS"
+echo "$LAST_STATS" | grep -qE "frames=[1-9]" || fail "motion mode received no camera images"
+adb logcat -d -s ScreenOff:V | grep -q "motion detected" || fail "motion mode never detected motion"
 trigger STOP
 sleep 15
 svc | grep -q "ServiceRecord" && fail "recorder service still running after motion stop"

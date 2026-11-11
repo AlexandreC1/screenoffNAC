@@ -18,19 +18,29 @@ class MotionDetector(
     private val s = sensitivity.coerceIn(0, 100) / 100f
 
     /** Per-cell luma difference (0..255) that counts as a change. */
-    val cellThreshold: Float = lerp(40f, 8f, s)
+    val cellThreshold: Float = lerp(30f, 6f, s)
 
     /** Number of changed cells needed to call it motion. */
-    val minChangedCells: Int = (lerp(0.04f, 0.004f, s) * cells).roundToInt().coerceAtLeast(1)
+    val minChangedCells: Int = (lerp(0.03f, 0.003f, s) * cells).roundToInt().coerceAtLeast(1)
 
     private val background = FloatArray(cells)
     private val current = FloatArray(cells)
+    private val diffs = FloatArray(cells)
+    private val sorted = FloatArray(cells)
     private var frames = 0
     private var consecutive = 0
+
+    /** Frames analyzed since the last reset. */
+    val framesAnalyzed: Int get() = frames
+
+    /** Changed cells in the last analyzed frame, for the on-screen meter. */
+    var lastChangedCells: Int = 0
+        private set
 
     fun reset() {
         frames = 0
         consecutive = 0
+        lastChangedCells = 0
     }
 
     /**
@@ -46,12 +56,21 @@ class MotionDetector(
             return false
         }
 
+        for (i in 0 until cells) diffs[i] = current[i] - background[i]
+
+        // Auto exposure brightens or darkens the whole picture when something enters it.
+        // Remove that shared shift (the median difference) so only local change counts.
+        diffs.copyInto(sorted)
+        sorted.sort()
+        val shift = (sorted[cells / 2 - 1] + sorted[cells / 2]) / 2f
+
         var changed = 0
         for (i in 0 until cells) {
-            if (abs(current[i] - background[i]) > cellThreshold) changed++
+            if (abs(diffs[i] - shift) > cellThreshold) changed++
         }
+        lastChangedCells = changed
 
-        // A change across most of the frame is exposure or lighting, not an intruder.
+        // Almost everything changed at once: lights switched, or the phone was moved.
         if (changed > cells * GLOBAL_CHANGE_FRACTION) {
             current.copyInto(background)
             consecutive = 0
@@ -59,9 +78,8 @@ class MotionDetector(
         }
 
         for (i in 0 until cells) {
-            val diff = current[i] - background[i]
-            val alpha = if (abs(diff) > cellThreshold) ALPHA_CHANGED else ALPHA_STILL
-            background[i] += alpha * diff
+            val alpha = if (abs(diffs[i] - shift) > cellThreshold) ALPHA_CHANGED else ALPHA_STILL
+            background[i] += alpha * diffs[i]
         }
 
         if (frames <= WARMUP_FRAMES) {
@@ -104,7 +122,7 @@ class MotionDetector(
     }
 
     private companion object {
-        const val GLOBAL_CHANGE_FRACTION = 0.6f
+        const val GLOBAL_CHANGE_FRACTION = 0.85f
         const val ALPHA_STILL = 0.1f
         const val ALPHA_CHANGED = 0.02f
         const val WARMUP_FRAMES = 5

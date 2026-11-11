@@ -1,7 +1,9 @@
 package dev.screenoff.recorder.ui
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
@@ -34,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.screenoff.core.CameraFacing
 import dev.screenoff.core.VideoQuality
+import androidx.core.content.FileProvider
+import dev.screenoff.recorder.Diag
 import dev.screenoff.recorder.Graph
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -176,10 +180,39 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
         }
 
+        Section("Diagnostics") {
+            Text(
+                "If something does not work, share this log with whoever fixes the app. It contains no video or sound.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = { shareDiagnostics(context) }) { Text("Share diagnostics") }
+        }
+
         Text(
             "Changes apply the next time recording starts.",
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+private fun shareDiagnostics(context: Context) {
+    val file = Diag.file(context)
+    if (!file.exists()) {
+        Toast.makeText(context, "No diagnostics yet", Toast.LENGTH_SHORT).show()
+        return
+    }
+    try {
+        val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .putExtra(Intent.EXTRA_SUBJECT, "ScreenOff Recorder diagnostics")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(
+            Intent.createChooser(send, "Share diagnostics").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    } catch (e: Exception) {
+        Toast.makeText(context, "Could not share: ${e.message}", Toast.LENGTH_LONG).show()
     }
 }
 

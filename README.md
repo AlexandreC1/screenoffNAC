@@ -39,6 +39,14 @@ If the phone says the app cannot be installed over an existing one, uninstall th
 - Clips go to the app's own folder unless you choose a folder in Settings. The app's own folder is removed if you uninstall the app, so choose a folder for anything you care about.
 - Recording stops by itself when the battery is low, the phone overheats, or storage is full and only kept clips remain. A notification says why.
 
+## If motion mode does not record
+
+While armed, the Home screen and the notification show "Movement X of Y needed". Wave a hand in front of the camera: X should jump above Y and a clip should start.
+
+- "Waiting for camera images" for more than a few seconds: the camera is not delivering images. The app switches to a fallback by itself after 4 seconds.
+- X stays small when you move: raise Motion sensitivity in Settings.
+- Either way: Settings, Share diagnostics, and send the file to whoever fixes the app.
+
 ## Please check on the phone and report back
 
 1. Start from the app, screen off 10 minutes, stop. Do the clips play and add up to 10 minutes?

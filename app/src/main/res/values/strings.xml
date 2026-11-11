@@ -8,6 +8,8 @@
     <string name="notif_recording_motion">Recording motion</string>
     <string name="notif_armed">Armed, waiting for motion</string>
     <string name="notif_saving">Saving clip</string>
+    <string name="notif_waiting_images">Waiting for camera images</string>
+    <string name="notif_meter">Movement %1$d of %2$d needed</string>
     <string name="notif_clip_kept">This clip will be kept</string>
     <string name="notif_stopped">Recording stopped</string>
     <string name="action_stop">Stop</string>

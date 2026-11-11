@@ -7,11 +7,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.service.quicksettings.TileService
-import android.util.Log
 import androidx.core.content.ContextCompat
 import dev.screenoff.core.RecMode
 import dev.screenoff.core.RecorderConfig
 import dev.screenoff.recorder.Actions
+import dev.screenoff.recorder.Diag
 import dev.screenoff.recorder.Graph
 import dev.screenoff.recorder.RecorderBus
 import dev.screenoff.recorder.service.Notifier
@@ -47,10 +47,10 @@ object Triggers {
                 .setAction(Actions.SERVICE_START)
                 .putExtra(Actions.EXTRA_MODE, mode.name)
             ContextCompat.startForegroundService(context, intent)
-            Log.i("ScreenOff", "start requested, mode=$mode")
+            Diag.log("start requested, mode=$mode")
             true
         } catch (e: Exception) {
-            Log.e("ScreenOff", "start failed", e)
+            Diag.log("start failed", e)
             Notifier.error(context, "Could not start recording: ${e.message ?: e.javaClass.simpleName}")
             false
         }

@@ -9,7 +9,6 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
-import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
@@ -24,6 +23,7 @@ import dev.screenoff.core.RecorderMachine.Event
 import dev.screenoff.core.RecorderStatus
 import dev.screenoff.core.Segment
 import dev.screenoff.recorder.Actions
+import dev.screenoff.recorder.Diag
 import dev.screenoff.recorder.Graph
 import dev.screenoff.recorder.RecorderBus
 import dev.screenoff.recorder.triggers.Triggers
@@ -56,6 +56,7 @@ class RecorderService : LifecycleService() {
     private var active = false
     private var cameraOpen = false
     private var tickCount = 0
+    private var motionStats: CameraController.MotionStats? = null
 
     private var segmentStartWallMs: Long? = null
     private var lockCurrent = false
@@ -85,7 +86,7 @@ class RecorderService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        Log.i("ScreenOff", "service command ${intent?.action} active=$active state=${machine.state}")
+        Diag.log("service command ${intent?.action} active=$active state=${machine.state}")
         when (intent?.action) {
             Actions.SERVICE_START -> {
                 val starting = !active
@@ -129,7 +130,7 @@ class RecorderService : LifecycleService() {
             true
         } catch (e: Exception) {
             // Typically: started while the app was not visible, or a permission is missing.
-            Log.e("ScreenOff", "startForeground refused", e)
+            Diag.log("startForeground refused", e)
             Notifier.error(this, "Android refused to start the camera service: ${e.message ?: e.javaClass.simpleName}")
             false
         }
@@ -145,7 +146,34 @@ class RecorderService : LifecycleService() {
                 fail("The camera could not go back to watching: ${e.message ?: e.javaClass.simpleName}")
             }
         }
+        if (event is Event.Tick && machine.mode == RecMode.MOTION && machine.state != RecState.IDLE) {
+            motionTick(event.nowMs)
+            if (effects.isEmpty()) publishStatus(surfaces = false)
+        }
+        if (event is Event.Motion && effects.isNotEmpty()) Diag.log("motion detected, recording")
         if (effects.isNotEmpty() || event !is Event.Tick) publishStatus()
+    }
+
+    /** Motion mode, once a second: refresh the meter, and repair a camera that sends no images. */
+    private fun motionTick(nowMs: Long) {
+        if (!cameraOpen) return
+        val stats = camera.motionStats()
+        motionStats = stats
+        if (machine.state == RecState.ARMED && !stats.split) {
+            val silentFor = nowMs - maxOf(camera.openedAtMs, camera.lastFrameAtMs)
+            if (silentFor > NO_FRAMES_LIMIT_MS) {
+                Diag.log("no analysis images for $silentFor ms with video + analysis together, switching to split mode")
+                try {
+                    camera.fallbackToSplit()
+                } catch (e: Exception) {
+                    Diag.log("split mode fallback failed", e)
+                    fail("The camera could not start watching: ${e.message ?: e.javaClass.simpleName}")
+                }
+            }
+        }
+        if (tickCount % 10 == 0) {
+            Diag.log("motion stats state=${machine.state} frames=${stats.frames} changed=${stats.changed} needed=${stats.needed} split=${stats.split}")
+        }
     }
 
     private suspend fun run(effect: Effect) {
@@ -158,6 +186,7 @@ class RecorderService : LifecycleService() {
             }
             Effect.CloseCamera -> {
                 cameraOpen = false
+                motionStats = null
                 camera.close()
             }
             is Effect.Finish -> finish(effect.error)
@@ -248,7 +277,7 @@ class RecorderService : LifecycleService() {
     }
 
     private suspend fun finish(error: String?) {
-        Log.i("ScreenOff", "finish error=$error")
+        Diag.log("finish error=$error")
         segmentStartWallMs = null
         releaseWakeLock()
         publishStatus(error)
@@ -278,14 +307,21 @@ class RecorderService : LifecycleService() {
         if (level * 100 / scale <= config.lowBatteryStopPercent) fail("Battery is low")
     }
 
-    private fun currentStatus(error: String? = machine.error) =
-        RecorderStatus(machine.state, machine.mode, segmentStartWallMs, error)
+    private fun currentStatus(error: String? = machine.error): RecorderStatus {
+        val m = motionStats.takeIf { machine.mode == RecMode.MOTION }
+        return RecorderStatus(
+            machine.state, machine.mode, segmentStartWallMs, error,
+            motionFrames = m?.frames ?: 0,
+            motionChanged = m?.changed ?: 0,
+            motionNeeded = m?.needed ?: 0,
+        )
+    }
 
-    private fun publishStatus(error: String? = machine.error) {
+    private fun publishStatus(error: String? = machine.error, surfaces: Boolean = true) {
         val status = currentStatus(error)
         RecorderBus.publish(status)
         if (foreground && status.state != RecState.IDLE) Notifier.updateOngoing(this, status, lockCurrent)
-        Triggers.refreshSurfaces(this)
+        if (surfaces) Triggers.refreshSurfaces(this)
     }
 
     private fun acquireWakeLock() {
@@ -313,4 +349,8 @@ class RecorderService : LifecycleService() {
     }
 
     private fun now(): Long = SystemClock.elapsedRealtime()
+
+    private companion object {
+        const val NO_FRAMES_LIMIT_MS = 4_000L
+    }
 }

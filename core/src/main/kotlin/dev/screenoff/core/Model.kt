@@ -54,4 +54,8 @@ data class RecorderStatus(
     /** Wall clock start of the segment being written, when RECORDING. */
     val segmentStartedAtMs: Long? = null,
     val lastError: String? = null,
+    /** Motion mode meter: camera images analyzed, changed cells in the last one, cells needed. */
+    val motionFrames: Int = 0,
+    val motionChanged: Int = 0,
+    val motionNeeded: Int = 0,
 )
