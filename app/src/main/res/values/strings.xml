@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ScreenOff Recorder</string>
+    <string name="channel_recording">Recording status</string>
+    <string name="channel_alerts">Recording problems</string>
+    <string name="notif_starting">Starting camera</string>
+    <string name="notif_recording">Recording</string>
+    <string name="notif_recording_motion">Recording motion</string>
+    <string name="notif_armed">Armed, waiting for motion</string>
+    <string name="notif_saving">Saving clip</string>
+    <string name="notif_clip_kept">This clip will be kept</string>
+    <string name="notif_stopped">Recording stopped</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_keep">Keep this clip</string>
+    <string name="tile_label">Recorder</string>
+    <string name="state_idle">Off</string>
+    <string name="state_armed">Armed</string>
+    <string name="state_recording">Recording</string>
+    <string name="state_saving">Saving</string>
+    <string name="widget_start">Start recording</string>
+    <string name="widget_armed">Armed. Tap to stop</string>
+    <string name="widget_recording">Recording. Tap to stop</string>
+    <string name="toast_permissions">Open the app once to grant camera permissions</string>
+    <string name="shortcut_continuous">Record now</string>
+    <string name="shortcut_motion">Motion mode</string>
+    <string name="shortcut_stop">Stop</string>
+</resources>

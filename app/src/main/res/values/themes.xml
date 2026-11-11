@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ScreenOff" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.ScreenOff.Trigger" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowIsFloating">false</item>
+    </style>
+</resources>

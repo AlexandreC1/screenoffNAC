@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="record" android:enabled="true" android:icon="@drawable/ic_rec"
+        android:shortcutShortLabel="@string/shortcut_continuous">
+        <intent android:action="dev.screenoff.recorder.action.START_CONTINUOUS"
+            android:targetPackage="dev.screenoff.recorder"
+            android:targetClass="dev.screenoff.recorder.triggers.TriggerActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="motion" android:enabled="true" android:icon="@drawable/ic_rec"
+        android:shortcutShortLabel="@string/shortcut_motion">
+        <intent android:action="dev.screenoff.recorder.action.START_MOTION"
+            android:targetPackage="dev.screenoff.recorder"
+            android:targetClass="dev.screenoff.recorder.triggers.TriggerActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="stop" android:enabled="true" android:icon="@drawable/ic_rec"
+        android:shortcutShortLabel="@string/shortcut_stop">
+        <intent android:action="dev.screenoff.recorder.action.STOP"
+            android:targetPackage="dev.screenoff.recorder"
+            android:targetClass="dev.screenoff.recorder.triggers.TriggerActivity" />
+    </shortcut>
+</shortcuts>
