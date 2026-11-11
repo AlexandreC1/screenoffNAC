@@ -2,18 +2,17 @@
 
 A personal Android app that records video with the screen off, loops over a storage cap, and can act as a motion-triggered security camera. Nothing leaves the phone: the app has no internet permission.
 
-Status: first code drop. The pure logic is tested. The Android app has not been compiled yet, so the first build will probably need fixes. See `TASKS.md`.
+Status: builds and records on emulators. Not yet confirmed on a real phone. See `TASKS.md`.
 
-## Getting an APK without touching the code
+## Getting the app
 
-1. Put this folder in a GitHub repository and push.
-2. Open the repository's Actions tab. The `build` workflow runs the tests and builds the app.
-3. When it is green, open the run and download the artifact `screenoff-recorder-debug-apk`.
-4. Copy the APK to the phone and install it (allow "install unknown apps" for your file manager).
+On the phone, open this link and install the file:
 
-If the workflow is red, give the log to the coding agent. That is task T-002.
+https://github.com/AlexandreC1/screenoffNAC/releases/latest/download/screenoff-recorder.apk
 
-Or build locally with Android Studio: open the folder, let it sync, Run.
+Every push runs the unit tests, builds the app, and records with it on Android 12 and Android 16 emulators. The link is only updated when all of that passes.
+
+If the phone says the app cannot be installed over an existing one, uninstall the old one first (the signing key changed).
 
 ## First run
 

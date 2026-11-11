@@ -18,19 +18,19 @@ Answered: Q1. Devices are a Xiaomi on HyperOS 3.0 / Android 16, and Samsung A20 
 
 | ID | Task | Lane | Tier | Status |
 |---|---|---|---|---|
-| T-001 | Gradle project, version catalog, wrapper, `:core` and `:app` modules, CI workflow | CONTRACT | T2 | written |
-| T-002 | First CI run green: fix whatever the compiler and dependency resolution report | ENGINE | T1 | todo |
-| T-003 | Manifest, permissions, resources, icons | ENGINE | T3 | written |
+| T-001 | Gradle project, version catalog, wrapper, `:core` and `:app` modules, CI workflow | CONTRACT | T2 | done (emulator) |
+| T-002 | First CI run green: fix whatever the compiler and dependency resolution report | ENGINE | T1 | done (emulator) |
+| T-003 | Manifest, permissions, resources, icons | ENGINE | T3 | done (emulator) |
 
 ## Phase 1: Record with the screen off
 
 | ID | Task | Lane | Tier | Status |
 |---|---|---|---|---|
 | T-010 | `RecorderMachine` and its tests | ENGINE | T1 | done |
-| T-011 | `RecorderService`: foreground start, event loop, effects, wake lock | ENGINE | T1 | written |
-| T-012 | `CameraController` on CameraX Recorder, no Preview, quality fallback | ENGINE | T1 | written |
-| T-013 | `ConfigStore` | ENGINE | T2 | written |
-| T-014 | `TriggerActivity`, `Triggers`, `Permissions` | ENGINE | T1 | written |
+| T-011 | `RecorderService`: foreground start, event loop, effects, wake lock | ENGINE | T1 | done (emulator) |
+| T-012 | `CameraController` on CameraX Recorder, no Preview, quality fallback | ENGINE | T1 | done (emulator) |
+| T-013 | `ConfigStore` | ENGINE | T2 | done (emulator) |
+| T-014 | `TriggerActivity`, `Triggers`, `Permissions` | ENGINE | T1 | done (emulator) |
 | T-015 | Home screen with permission flow and battery prompt | UI | T2 | written |
 
 Acceptance (owner, on device): start from the app, turn the screen off for 10 minutes, stop, the clips play and add up to about 10 minutes. The notification is visible the whole time.
@@ -39,10 +39,10 @@ Acceptance (owner, on device): start from the app, turn the screen off for 10 mi
 
 | ID | Task | Lane | Tier | Status |
 |---|---|---|---|---|
-| T-020 | `StorageGateway`: staging, publish to app folder or chosen folder, delete | ENGINE | T1 | written |
-| T-021 | `SegmentIndex` (JSON) and startup reconcile | ENGINE | T2 | written |
+| T-020 | `StorageGateway`: staging, publish to app folder or chosen folder, delete | ENGINE | T1 | done (emulator) |
+| T-021 | `SegmentIndex` (JSON) and startup reconcile | ENGINE | T2 | done (emulator) |
 | T-022 | `EvictionPolicy` and its tests | ENGINE | T1 | done |
-| T-023 | Rotation and eviction wired into the service | ENGINE | T1 | written |
+| T-023 | Rotation and eviction wired into the service | ENGINE | T1 | done (emulator) |
 | T-025 | Settings screen | UI | T2 | written |
 | T-026 | Library screen: list, open, lock, delete | UI | T2 | written |
 
@@ -65,9 +65,9 @@ Acceptance (owner): with a 1 GB cap and 1 minute segments, recording runs past t
 | ID | Task | Lane | Tier | Status |
 |---|---|---|---|---|
 | T-040 | `MotionDetector` and its tests | ENGINE | T2 | done |
-| T-042 | `ImageAnalysis` wired in, ARMED state, post-roll | ENGINE | T1 | written |
+| T-042 | `ImageAnalysis` wired in, ARMED state, post-roll | ENGINE | T1 | done (emulator) |
 | T-043 | Motion settings in the UI | UI | T3 | written |
-| T-044 | Fallback when the camera cannot run video and analysis together (analysis only while armed, rebind on motion) | ENGINE | T1 | todo |
+| T-044 | Fallback when the camera cannot run video and analysis together (analysis only while armed, rebind on motion) | ENGINE | T1 | done (emulator) |
 | T-045 | Tune sensitivity defaults on the real phones | owner + ENGINE | T2 | todo |
 
 Acceptance (owner): phone on a shelf in motion mode, nothing recorded for 5 quiet minutes, walking past creates one clip that ends about 10 seconds after leaving.
@@ -92,6 +92,16 @@ Acceptance (owner): phone on a shelf in motion mode, nothing recorded for 5 quie
 ## Handoff log
 
 Newest entry first. Format is in `AGENTS.md` section 10.
+
+### 2026-11-11, Claude (chat session), ENGINE + CONTRACT
+Done: T-002 (CI green on the first compile), T-044 (motion fallback: analysis alone while armed, video alone while recording, used when the camera cannot bind both). CI now has three jobs: build, smoke (emulator, API 31 and 36), publish.
+Verified on emulators by `scripts/smoke.sh`: install, open the UI, start through `TriggerActivity`, record 70 s with the screen off, two rotations at 30 s, stop, three playable-size clips in the index, staging empty, then motion mode (split fallback path) producing clips, no crash, no error notification.
+"done (emulator)" in the tables means exactly that. It is not a phone result.
+Not verified: anything on the real phones. The combined video + analysis path (emulator cameras only exercise the fallback). Tile, widget, launcher shortcuts, notification actions, chosen folder (SAF), eviction on device, Compose screens beyond launching, HyperOS background limits.
+Flake seen once: on API 36 the first start did not happen in one of four runs, before app logging existed. Cause not confirmed. The test now pauses 3 s after HOME and polls. If it comes back, read the `ScreenOff` log tag.
+Signing: CI keeps one debug keystore in the Actions cache (`debug-keystore-v1`) or takes it from the `DEBUG_KEYSTORE_B64` secret when set. If the cache is evicted and no secret is set, the next APK has a new key and needs an uninstall first.
+Download: https://github.com/AlexandreC1/screenoffNAC/releases/latest/download/screenoff-recorder.apk (only updated when smoke passes).
+Next: owner runs the README checklist on the Xiaomi. Then T-035, T-045.
 
 ### 2026-11-10, Claude (chat session), ENGINE + CONTRACT
 Done: T-010, T-022, T-040 (26 unit tests in `:core` pass, compiled and run with Kotlin 2.0.21 and JUnit 4.13.2).
