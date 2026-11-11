@@ -30,6 +30,7 @@ say "install"
 adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
 adb install -r "$APK" || { fail "install"; finish; }
 adb shell pm grant $PKG android.permission.CAMERA
+adb shell pm grant $PKG android.permission.RECORD_AUDIO
 adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 
 # 30 second segments so rotation happens during the test.
@@ -75,6 +76,12 @@ echo "$INDEX" | grep -q '"sizeBytes":0[,}]' && fail "a clip has size 0"
 echo "$INDEX" | grep -q '"durationMs":0[,}]' && fail "a clip has duration 0"
 LEFT=$(adb shell ls $MOVIES/staging/ 2>/dev/null | wc -l)
 [ "$LEFT" -eq 0 ] || fail "staging folder is not empty after stop"
+
+say "sound"
+AUDIO_TRACKS=$(adb logcat -d | grep -c "Muxer.addTrack() for audio")
+echo "clips with an audio track: $AUDIO_TRACKS"
+[ "$AUDIO_TRACKS" -ge 3 ] || { adb logcat -d | grep -iE "audio" | grep -iE "recorder|source|error" | tail -20 | cut -c1-300; fail "clips were recorded without sound"; }
+adb shell dumpsys activity services "$PKG/.service.RecorderService" | grep -i "types" | head -3
 
 say "motion mode: arm, 45 seconds, stop"
 trigger START_MOTION

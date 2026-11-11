@@ -17,7 +17,7 @@ data class RecorderConfig(
     val mode: RecMode = RecMode.CONTINUOUS,
     val cameraFacing: CameraFacing = CameraFacing.BACK,
     val quality: VideoQuality = VideoQuality.HD,
-    val audioEnabled: Boolean = false,
+    val audioEnabled: Boolean = true,
     val segmentLengthSec: Int = 180,
     val capBytes: Long = 4L shl 30,
     val freeSpaceFloorBytes: Long = 500L shl 20,

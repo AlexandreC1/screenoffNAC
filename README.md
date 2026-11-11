@@ -16,7 +16,7 @@ If the phone says the app cannot be installed over an existing one, uninstall th
 
 ## First run
 
-1. Open the app and press Start. Grant Camera and Notifications. Microphone is only asked if you turn audio on in Settings.
+1. Open the app and press Start. Grant Camera, Microphone and Notifications. Without Microphone the app will not start recording.
 2. On the Home tab, press Allow on the battery card.
 3. Xiaomi HyperOS also needs, in the system Settings app, under Apps, ScreenOff Recorder:
    - Autostart: on

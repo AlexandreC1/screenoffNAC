@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 /** Settings, kept in SharedPreferences. Source of truth for the service and the UI. */
 class ConfigStore(context: Context) {
     private val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
-    private val _config = MutableStateFlow(read())
+    private val _config = MutableStateFlow(migrateThenRead())
     val config: StateFlow<RecorderConfig> = _config
 
     @Synchronized
@@ -31,6 +31,14 @@ class ConfigStore(context: Context) {
             .putInt(K_BATTERY, next.lowBatteryStopPercent)
             .apply()
         _config.value = next
+    }
+
+    /** v2: sound is the point of the app, so audio is turned on for existing installs too. */
+    private fun migrateThenRead(): RecorderConfig {
+        if (prefs.getInt(K_VERSION, 1) < 2) {
+            prefs.edit().putBoolean(K_AUDIO, true).putInt(K_VERSION, 2).apply()
+        }
+        return read()
     }
 
     private fun read(): RecorderConfig {
@@ -65,5 +73,6 @@ class ConfigStore(context: Context) {
         const val K_SENSITIVITY = "motionSensitivity"
         const val K_POSTROLL = "postRollSec"
         const val K_BATTERY = "lowBatteryStopPercent"
+        const val K_VERSION = "configVersion"
     }
 }

@@ -125,7 +125,7 @@ Sensitivity 0..100 maps linearly to `cellThreshold` 40..8 and `minChangedCells` 
 
 `RecorderConfig` in `core/Model.kt` is the single definition, with defaults and `sanitized()` ranges. The service snapshots the config when a recording starts, so changes apply to the next start.
 
-Defaults are starting points, not owner decisions. Audio defaults to off on purpose: recording other people's voices is regulated in many places, so the owner opts in.
+Audio is on by default: the owner stated that capturing sound is the main purpose. Existing installs are migrated to audio on (`configVersion` 2 in `ConfigStore`). The settings screen keeps a one-line consent note under the audio switch. Other defaults are starting points, not owner decisions.
 
 ## 9. Permissions and manifest
 

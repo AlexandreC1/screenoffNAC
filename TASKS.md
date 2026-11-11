@@ -8,11 +8,10 @@ Task board and handoff log. Status values: `todo`, `doing`, `written` (code exis
 
 - Q2: Final app name and applicationId (currently "ScreenOff Recorder", `dev.screenoff.recorder`). Changing the applicationId later means a fresh install.
 - Q3: Storage cap and default quality he actually wants (defaults are 4 GB and HD).
-- Q4: Audio on or off by default (currently off).
 - Q5: Is the volume-key trigger wanted enough to accept an accessibility service?
 - Q6: Which GitHub repository this goes in, so CI can build the APK.
 
-Answered: Q1. Devices are a Xiaomi on HyperOS 3.0 / Android 16, and Samsung A20 and A21 on Android 12.
+Answered: Q4. Audio on by default, sound is the main point (owner, 2026-11-11). Q1. Devices are a Xiaomi on HyperOS 3.0 / Android 16, and Samsung A20 and A21 on Android 12.
 
 ## Phase 0: Foundation
 

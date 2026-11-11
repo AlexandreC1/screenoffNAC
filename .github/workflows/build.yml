@@ -76,7 +76,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back emulated -camera-front emulated
           script: bash scripts/smoke.sh
       - uses: actions/upload-artifact@v4
         if: always()
@@ -105,4 +105,4 @@ jobs:
           cp apk/*.apk screenoff-recorder.apk
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest screenoff-recorder.apk --target "$GITHUB_SHA" \
-            --title "Latest tested build" --notes "Built from $GITHUB_SHA. Passed unit tests and the emulator recording test."
+            --title "Latest tested build" --notes "Built from $GITHUB_SHA. Passed unit tests and the emulator recording test, with sound."
