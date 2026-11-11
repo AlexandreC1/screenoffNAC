@@ -9,6 +9,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
@@ -84,6 +85,7 @@ class RecorderService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        Log.i("ScreenOff", "service command ${intent?.action} active=$active state=${machine.state}")
         when (intent?.action) {
             Actions.SERVICE_START -> {
                 val starting = !active
@@ -127,6 +129,7 @@ class RecorderService : LifecycleService() {
             true
         } catch (e: Exception) {
             // Typically: started while the app was not visible, or a permission is missing.
+            Log.e("ScreenOff", "startForeground refused", e)
             Notifier.error(this, "Android refused to start the camera service: ${e.message ?: e.javaClass.simpleName}")
             false
         }
@@ -245,6 +248,7 @@ class RecorderService : LifecycleService() {
     }
 
     private suspend fun finish(error: String?) {
+        Log.i("ScreenOff", "finish error=$error")
         segmentStartWallMs = null
         releaseWakeLock()
         publishStatus(error)

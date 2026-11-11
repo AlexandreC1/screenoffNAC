@@ -12,7 +12,9 @@ FAILED=0
 say() { echo; echo "=== $*"; }
 fail() { echo "FAIL: $*"; FAILED=1; }
 svc() { adb shell dumpsys activity services "$PKG/.service.RecorderService" 2>/dev/null; }
-trigger() { adb shell am start -W -n "$PKG/.triggers.TriggerActivity" -a "$PKG.action.$1" >/dev/null 2>&1; }
+trigger() { adb shell am start -W -n "$PKG/.triggers.TriggerActivity" -a "$PKG.action.$1" 2>&1 | grep -E "Status|Error|Warning" ; }
+applog() { adb logcat -d -s ScreenOff:V ActivityTaskManager:I | grep -E "ScreenOff|screenoff" | tail -${1:-15} | cut -c1-400; }
+wait_fg() { for i in $(seq 1 15); do svc | grep -q "isForeground=true" && { echo "foreground after ~$((i*2))s"; return 0; }; sleep 2; done; return 1; }
 finish() {
   adb logcat -d > "$OUT/logcat.txt" 2>/dev/null
   adb shell dumpsys notification --noredact > "$OUT/notifications.txt" 2>/dev/null
@@ -43,9 +45,11 @@ adb exec-out screencap -p > "$OUT/home.png" 2>/dev/null
 
 say "start continuous recording through the trigger activity"
 adb shell input keyevent KEYCODE_HOME
+sleep 3
 trigger START_CONTINUOUS
-sleep 8
-svc | grep -q "isForeground=true" || fail "recorder service is not in the foreground after start"
+wait_fg || fail "recorder service is not in the foreground after start"
+applog
+adb exec-out screencap -p > "$OUT/after_start.png" 2>/dev/null
 
 say "screen off for 70 seconds"
 adb shell input keyevent KEYCODE_SLEEP
@@ -74,8 +78,9 @@ LEFT=$(adb shell ls $MOVIES/staging/ 2>/dev/null | wc -l)
 
 say "motion mode: arm, 45 seconds, stop"
 trigger START_MOTION
-sleep 45
-svc | grep -q "isForeground=true" || fail "recorder service is not in the foreground in motion mode"
+wait_fg || fail "recorder service is not in the foreground in motion mode"
+sleep 40
+svc | grep -q "isForeground=true" || fail "recorder service died in motion mode"
 trigger STOP
 sleep 15
 svc | grep -q "ServiceRecord" && fail "recorder service still running after motion stop"
@@ -85,6 +90,9 @@ echo "motion clips: $(grep -o '"mode":"MOTION"' "$OUT/segments_after_motion.json
 grep -q '"sizeBytes":0[,}]' "$OUT/segments_after_motion.json" && fail "a motion clip has size 0"
 adb shell ls -la $MOVIES/motion/ 2>/dev/null
 [ "$(adb shell ls $MOVIES/staging/ 2>/dev/null | wc -l)" -eq 0 ] || fail "staging folder is not empty after motion stop"
+
+say "app log"
+applog 60
 
 say "crashes and error notifications"
 adb logcat -d > "$OUT/logcat.txt"

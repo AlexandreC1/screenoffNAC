@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import dev.screenoff.core.RecMode
 import dev.screenoff.recorder.Actions
@@ -40,6 +41,7 @@ class TriggerActivity : Activity() {
 
     private fun dispatch() {
         val running = RecorderBus.isRunning
+        Log.i("ScreenOff", "trigger ${intent?.action} running=$running")
         val config = Graph.config.config.value
         when (intent?.action) {
             Actions.STOP -> Triggers.stop(this)
@@ -51,6 +53,7 @@ class TriggerActivity : Activity() {
 
     private fun start(mode: RecMode) {
         if (!Permissions.ready(this, Graph.config.config.value)) {
+            Log.w("ScreenOff", "trigger refused, missing ${Permissions.missing(this, Graph.config.config.value)}")
             // Permissions can only be requested from the real UI.
             Toast.makeText(this, R.string.toast_permissions, Toast.LENGTH_LONG).show()
             startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
