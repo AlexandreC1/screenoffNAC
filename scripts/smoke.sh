@@ -63,23 +63,28 @@ say "clips"
 INDEX=$(adb shell "run-as $PKG cat files/segments.json" 2>/dev/null)
 echo "$INDEX" > "$OUT/segments.json"
 echo "$INDEX"
-adb shell "run-as $PKG ls -la /sdcard/Android/data/$PKG/files/Movies/continuous/" | tee "$OUT/files.txt"
+MOVIES=/data/media/0/Android/data/$PKG/files/Movies
+adb shell ls -la $MOVIES/continuous/ | tee "$OUT/files.txt"
 COUNT=$(echo "$INDEX" | grep -o '"id"' | wc -l)
 [ "$COUNT" -ge 3 ] || fail "expected at least 3 clips (2 rotations and the stop), found $COUNT"
 echo "$INDEX" | grep -q '"sizeBytes":0[,}]' && fail "a clip has size 0"
 echo "$INDEX" | grep -q '"durationMs":0[,}]' && fail "a clip has duration 0"
-LEFT=$(adb shell "run-as $PKG ls /sdcard/Android/data/$PKG/files/Movies/staging/" 2>/dev/null | wc -l)
+LEFT=$(adb shell ls $MOVIES/staging/ 2>/dev/null | wc -l)
 [ "$LEFT" -eq 0 ] || fail "staging folder is not empty after stop"
 
-say "motion mode: arm, wait, stop"
+say "motion mode: arm, 45 seconds, stop"
 trigger START_MOTION
-sleep 15
+sleep 45
 svc | grep -q "isForeground=true" || fail "recorder service is not in the foreground in motion mode"
 trigger STOP
-sleep 12
+sleep 15
 svc | grep -q "ServiceRecord" && fail "recorder service still running after motion stop"
 adb shell "run-as $PKG cat files/segments.json" > "$OUT/segments_after_motion.json" 2>/dev/null
-echo "clips after motion mode: $(grep -o '"id"' "$OUT/segments_after_motion.json" | wc -l)"
+cat "$OUT/segments_after_motion.json"; echo
+echo "motion clips: $(grep -o '"mode":"MOTION"' "$OUT/segments_after_motion.json" | wc -l)"
+grep -q '"sizeBytes":0[,}]' "$OUT/segments_after_motion.json" && fail "a motion clip has size 0"
+adb shell ls -la $MOVIES/motion/ 2>/dev/null
+[ "$(adb shell ls $MOVIES/staging/ 2>/dev/null | wc -l)" -eq 0 ] || fail "staging folder is not empty after motion stop"
 
 say "crashes and error notifications"
 adb logcat -d > "$OUT/logcat.txt"

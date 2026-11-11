@@ -10,7 +10,6 @@ import android.os.SystemClock
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.UseCase
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -33,6 +32,7 @@ import dev.screenoff.core.VideoQuality
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * CameraX wrapper. There is no Preview use case: nothing is drawn, so it works
@@ -54,6 +54,16 @@ class CameraController(private val context: Context, private val owner: Lifecycl
     private var provider: ProcessCameraProvider? = null
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
+    private var selector: CameraSelector? = null
+    private var analysis: ImageAnalysis? = null
+    private val resetDetector = AtomicBoolean(false)
+
+    /**
+     * True when this camera cannot run video and analysis at the same time.
+     * Then analysis runs alone while armed and video runs alone while recording.
+     */
+    var splitMode = false
+        private set
 
     val isRecording: Boolean get() = recording != null
 
@@ -76,13 +86,42 @@ class CameraController(private val context: Context, private val owner: Lifecycl
             .build()
         val capture = VideoCapture.withOutput(recorder)
 
-        val useCases = ArrayList<UseCase>()
-        useCases += capture
-        if (mode == RecMode.MOTION) useCases += buildAnalysis(config, onMotion)
-
-        p.unbindAll()
-        p.bindToLifecycle(owner, selector, *useCases.toTypedArray())
+        this.selector = selector
         videoCapture = capture
+        splitMode = false
+        analysis = null
+        p.unbindAll()
+        if (mode == RecMode.MOTION) {
+            val a = buildAnalysis(config, onMotion)
+            analysis = a
+            try {
+                p.bindToLifecycle(owner, selector, capture, a)
+            } catch (e: Exception) {
+                // Common on entry-level cameras. Watch first, then switch to video on motion.
+                p.unbindAll()
+                p.bindToLifecycle(owner, selector, a)
+                splitMode = true
+            }
+        } else {
+            p.bindToLifecycle(owner, selector, capture)
+        }
+    }
+
+    /** Split mode only: hand the camera to the video recorder. */
+    fun prepareForRecording() {
+        if (!splitMode) return
+        val p = provider ?: return
+        p.unbindAll()
+        p.bindToLifecycle(owner, requireNotNull(selector), requireNotNull(videoCapture))
+    }
+
+    /** Split mode only: hand the camera back to motion analysis. */
+    fun rearm() {
+        if (!splitMode) return
+        val p = provider ?: return
+        resetDetector.set(true)
+        p.unbindAll()
+        p.bindToLifecycle(owner, requireNotNull(selector), requireNotNull(analysis))
     }
 
     private fun buildAnalysis(config: RecorderConfig, onMotion: () -> Unit): ImageAnalysis {
@@ -103,6 +142,7 @@ class CameraController(private val context: Context, private val owner: Lifecycl
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastAnalyzedAt >= ANALYSIS_INTERVAL_MS) {
                     lastAnalyzedAt = now
+                    if (resetDetector.getAndSet(false)) detector.reset()
                     val plane = image.planes[0]
                     if (detector.analyze(plane.buffer, image.width, image.height, plane.rowStride)) {
                         mainHandler.post(onMotion)
@@ -157,6 +197,7 @@ class CameraController(private val context: Context, private val owner: Lifecycl
         recording?.stop()
         runCatching { provider?.unbindAll() }
         videoCapture = null
+        analysis = null
     }
 
     fun shutdown() {

@@ -135,6 +135,13 @@ class RecorderService : LifecycleService() {
     private suspend fun handle(event: Event) {
         val effects = machine.on(event)
         for (fx in effects) run(fx)
+        if (event is Event.SegmentFinalized && machine.state == RecState.ARMED) {
+            try {
+                camera.rearm()
+            } catch (e: Exception) {
+                fail("The camera could not go back to watching: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
         if (effects.isNotEmpty() || event !is Event.Tick) publishStatus()
     }
 
@@ -183,6 +190,12 @@ class RecorderService : LifecycleService() {
         val startedWall = System.currentTimeMillis()
         val file = Graph.storage.newStagingFile(mode, startedWall)
         lockCurrent = false
+        try {
+            camera.prepareForRecording()
+        } catch (e: Exception) {
+            fail("The camera could not switch to recording: ${e.message ?: e.javaClass.simpleName}")
+            return
+        }
         val started = camera.startRecording(file, config.audioEnabled) { result ->
             onSegmentClosed(file, mode, startedWall, result)
         }
