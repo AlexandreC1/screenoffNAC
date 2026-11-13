@@ -41,10 +41,30 @@ class MotionDetectorTest {
     }
 
     @Test
-    fun globalLightChangeDoesNotTrigger() {
+    fun suddenWholePictureChangeTriggers() {
+        // A hand right in front of the lens, or a light switched on.
         val d = MotionDetector(sensitivity = 50)
         warm(d)
-        repeat(10) { assertFalse(d.analyze(frame(base = 180), w, h, w)) }
+        var triggered = false
+        repeat(4) { if (d.analyze(frame(base = 180), w, h, w)) triggered = true }
+        assertTrue(triggered)
+    }
+
+    @Test
+    fun wholePictureChangeSettlesAndGoesQuiet() {
+        val d = MotionDetector(sensitivity = 50)
+        warm(d)
+        var lastTrue = -1
+        for (i in 0 until 150) if (d.analyze(frame(base = 180), w, h, w)) lastTrue = i
+        assertTrue("still triggering at frame $lastTrue", lastTrue in 0..100)
+    }
+
+    @Test
+    fun slowBrightnessDriftDoesNotTrigger() {
+        // Daylight changing or exposure settling: 1 level per frame.
+        val d = MotionDetector(sensitivity = 50)
+        warm(d)
+        for (i in 0 until 80) assertFalse(d.analyze(frame(base = 100 + i), w, h, w))
     }
 
     @Test

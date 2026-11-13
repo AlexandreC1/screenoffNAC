@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -26,12 +28,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.screenoff.core.CameraFacing
@@ -89,7 +93,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        Section("Quality") {
+        Section("Video quality") {
             ChoiceRow(
                 options = VideoQuality.entries.map { q ->
                     "${q.name} (${q.bitrateBps / 1_000_000} Mbps)" to q
@@ -99,10 +103,10 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        Section("Audio") {
+        Section("Sound") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Record audio",
+                    "Record sound",
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.weight(1f),
                 )
@@ -117,23 +121,58 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        Section("Segment length") {
+        Section("Length of each file") {
+            Text(
+                "Recording never stops by itself. This only sets how long each video file is before a new one starts. " +
+                    "Pick a length or type any number of minutes, up to 1440 (24 hours).",
+                style = MaterialTheme.typography.bodySmall,
+            )
             ChoiceRow(
-                options = listOf(1, 3, 5, 10).map { "$it min" to it * 60 },
+                options = listOf(1, 3, 5, 10, 30, 60, 120).map { formatMinutes(it * 60) to it * 60 },
                 selected = config.segmentLengthSec,
                 onSelect = { v -> Graph.config.update { it.copy(segmentLengthSec = v) } },
             )
+            NumberField(
+                label = "Minutes per file",
+                current = config.segmentLengthSec / 60,
+                range = 1..1440,
+                onValid = { v -> Graph.config.update { it.copy(segmentLengthSec = v * 60) } },
+            )
+            val audioBps = if (config.audioEnabled) 128_000 else 0
+            val fileBytes = (config.quality.bitrateBps + audioBps).toLong() / 8L * config.segmentLengthSec
+            Text(
+                "One file will be about ${formatBytes(fileBytes)}. If the phone restarts or the app is closed by the " +
+                    "system during a recording, the file in progress is lost, so very long files are riskier.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (fileBytes > config.capBytes) {
+                Text(
+                    "This is larger than your storage limit below. Raise the limit, or older clips will all be removed to make room.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
 
-        Section("Storage cap") {
+        Section("Storage limit") {
+            Text(
+                "How much space recordings may use. When it is full, the oldest clips are replaced.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             ChoiceRow(
-                options = listOf(1, 2, 4, 8, 16, 32).map { "$it GB" to (it.toLong() shl 30) },
+                options = listOf(1, 2, 4, 8, 16, 32, 64).map { "$it GB" to (it.toLong() shl 30) },
                 selected = config.capBytes,
                 onSelect = { v -> Graph.config.update { it.copy(capBytes = v) } },
             )
+            NumberField(
+                label = "GB",
+                current = (config.capBytes shr 30).toInt(),
+                range = 1..512,
+                onValid = { v -> Graph.config.update { it.copy(capBytes = v.toLong() shl 30) } },
+            )
         }
 
-        Section("Folder") {
+        Section("Where clips are saved") {
             Text(
                 text = if (treeUri == null) "App folder (default)" else (folderName ?: "Selected folder"),
                 style = MaterialTheme.typography.bodyLarge,
@@ -151,7 +190,11 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Section("Motion sensitivity: ${sensitivity.roundToInt()}") {
+        Section("Movement sensitivity: ${sensitivity.roundToInt()}") {
+            Text(
+                "Higher reacts to smaller movement. Raise it if the security mode misses things, lower it if it records too often.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             Slider(
                 value = sensitivity,
                 onValueChange = { sensitivity = it },
@@ -164,7 +207,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        Section("Keep recording after motion stops") {
+        Section("Keep recording after movement stops") {
             ChoiceRow(
                 options = listOf(5, 10, 20, 30, 60).map { "$it s" to it },
                 selected = config.postRollSec,
@@ -222,6 +265,24 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
         Text(title, style = MaterialTheme.typography.titleMedium)
         content()
     }
+}
+
+/** Free numeric entry. Applies as soon as the typed value is inside [range]. */
+@Composable
+private fun NumberField(label: String, current: Int, range: IntRange, onValid: (Int) -> Unit) {
+    var text by remember(current) { mutableStateOf(current.toString()) }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { typed ->
+            text = typed.filter { it.isDigit() }.take(4)
+            val v = text.toIntOrNull()
+            if (v != null && v in range && v != current) onValid(v)
+        },
+        label = { Text(label) },
+        singleLine = true,
+        isError = text.toIntOrNull()?.let { it !in range } ?: true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+    )
 }
 
 @Composable

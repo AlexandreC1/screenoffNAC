@@ -207,7 +207,9 @@ class RecorderService : LifecycleService() {
         val mode = machine.mode ?: return
         if (!cameraOpen) return // Opening failed and a Fail event is already queued. Do not evict anything.
         val audioBps = if (config.audioEnabled) 128_000 else 0
+        // A clip longer than the whole cap is the owner's choice: make all the room there is, then record.
         val nextBytes = EvictionPolicy.estimateSegmentBytes(config.quality.bitrateBps + audioBps, config.segmentLengthSec)
+            .coerceAtMost(config.capBytes)
 
         // Wait for clips still being moved into the library so the index is complete.
         publishJobs.toList().joinAll()

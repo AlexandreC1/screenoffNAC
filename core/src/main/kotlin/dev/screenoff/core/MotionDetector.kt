@@ -68,17 +68,15 @@ class MotionDetector(
         for (i in 0 until cells) {
             if (abs(diffs[i] - shift) > cellThreshold) changed++
         }
+        // A sudden change of the whole picture is an event too: something right in front
+        // of the lens, a light switched on, the phone moved. Slow drifts (daylight, exposure
+        // settling) stay below the threshold because the background follows them.
+        val sceneChanged = abs(shift) > cellThreshold
+        if (sceneChanged) changed = cells
         lastChangedCells = changed
 
-        // Almost everything changed at once: lights switched, or the phone was moved.
-        if (changed > cells * GLOBAL_CHANGE_FRACTION) {
-            current.copyInto(background)
-            consecutive = 0
-            return false
-        }
-
         for (i in 0 until cells) {
-            val alpha = if (abs(diffs[i] - shift) > cellThreshold) ALPHA_CHANGED else ALPHA_STILL
+            val alpha = if (sceneChanged || abs(diffs[i] - shift) > cellThreshold) ALPHA_CHANGED else ALPHA_STILL
             background[i] += alpha * diffs[i]
         }
 
@@ -122,9 +120,8 @@ class MotionDetector(
     }
 
     private companion object {
-        const val GLOBAL_CHANGE_FRACTION = 0.85f
         const val ALPHA_STILL = 0.1f
-        const val ALPHA_CHANGED = 0.02f
+        const val ALPHA_CHANGED = 0.03f
         const val WARMUP_FRAMES = 5
         const val CONSECUTIVE_FRAMES = 2
 

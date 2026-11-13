@@ -14,6 +14,26 @@ fail() { echo "FAIL: $*"; FAILED=1; }
 svc() { adb shell dumpsys activity services "$PKG/.service.RecorderService" 2>/dev/null; }
 trigger() { adb shell am start -W -n "$PKG/.triggers.TriggerActivity" -a "$PKG.action.$1" 2>&1 | grep -E "Status|Error|Warning" ; }
 applog() { adb logcat -d -s ScreenOff:V ActivityTaskManager:I | grep -E "ScreenOff|screenoff" | tail -${1:-15} | cut -c1-400; }
+# Taps the on-screen element whose text is exactly $1.
+tap_text() {
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  adb shell cat /sdcard/ui.xml > "$OUT/ui.xml" 2>/dev/null
+  XY=$(python3 - "$1" "$OUT/ui.xml" <<'PY'
+import re, sys
+want, path = sys.argv[1], sys.argv[2]
+data = open(path, encoding="utf-8", errors="ignore").read()
+for node in re.findall(r"<node [^>]*>", data):
+    t = re.search(r'text="([^"]*)"', node)
+    b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node)
+    if t and b and t.group(1) == want:
+        x1, y1, x2, y2 = map(int, b.groups())
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        break
+PY
+)
+  [ -n "$XY" ] || { echo "texts on screen:"; grep -o 'text="[^"]\+"' "$OUT/ui.xml" | head -30; return 1; }
+  adb shell input tap $XY
+}
 wait_fg() { for i in $(seq 1 15); do svc | grep -q "isForeground=true" && { echo "foreground after ~$((i*2))s"; return 0; }; sleep 2; done; return 1; }
 finish() {
   adb logcat -d > "$OUT/logcat.txt" 2>/dev/null
@@ -83,18 +103,28 @@ echo "clips with an audio track: $AUDIO_TRACKS"
 [ "$AUDIO_TRACKS" -ge 3 ] || { adb logcat -d | grep -iE "audio" | grep -iE "recorder|source|error" | tail -20 | cut -c1-300; fail "clips were recorded without sound"; }
 adb shell dumpsys activity services "$PKG/.service.RecorderService" | grep -i "types" | head -3
 
-say "motion mode: arm, 45 seconds, stop"
-trigger START_MOTION
+say "motion mode, started with the real START button"
+adb shell svc power stayon true
+adb shell am force-stop $PKG
+printf "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <int name=\"segmentLengthSec\" value=\"30\" />\n    <string name=\"mode\">MOTION</string>\n    <int name=\"configVersion\" value=\"2\" />\n    <boolean name=\"audioEnabled\" value=\"true\" />\n</map>\n" \
+  | adb shell "run-as $PKG sh -c 'cat > shared_prefs/config.xml'"
+adb shell am start -W -n "$PKG/.ui.MainActivity" >/dev/null
+sleep 6
+adb exec-out screencap -p > "$OUT/home_motion.png" 2>/dev/null
+tap_text START || fail "START button not found on the Home screen"
 wait_fg || fail "recorder service is not in the foreground in motion mode"
+applog 6
+adb logcat -d -s ScreenOff:V | grep -q "start requested, mode=MOTION" || fail "the START button did not start motion mode"
 sleep 40
 svc | grep -q "isForeground=true" || fail "recorder service died in motion mode"
 LAST_STATS=$(adb logcat -d -s ScreenOff:V | grep "motion stats" | tail -1)
 echo "$LAST_STATS"
 echo "$LAST_STATS" | grep -qE "frames=[1-9]" || fail "motion mode received no camera images"
 adb logcat -d -s ScreenOff:V | grep -q "motion detected" || fail "motion mode never detected motion"
-trigger STOP
+adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard >/dev/null 2>&1; sleep 2
+tap_text STOP || fail "STOP button not found on the Home screen"
 sleep 15
-svc | grep -q "ServiceRecord" && fail "recorder service still running after motion stop"
+svc | grep -q "ServiceRecord" && fail "recorder service still running after pressing STOP"
 adb shell "run-as $PKG cat files/segments.json" > "$OUT/segments_after_motion.json" 2>/dev/null
 cat "$OUT/segments_after_motion.json"; echo
 echo "motion clips: $(grep -o '"mode":"MOTION"' "$OUT/segments_after_motion.json" | wc -l)"

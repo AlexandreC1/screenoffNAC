@@ -28,7 +28,7 @@ data class RecorderConfig(
     val lowBatteryStopPercent: Int = 10,
 ) {
     fun sanitized(): RecorderConfig = copy(
-        segmentLengthSec = segmentLengthSec.coerceIn(30, 1800),
+        segmentLengthSec = segmentLengthSec.coerceIn(30, 24 * 3600),
         capBytes = capBytes.coerceAtLeast(100L shl 20),
         freeSpaceFloorBytes = freeSpaceFloorBytes.coerceAtLeast(100L shl 20),
         motionSensitivity = motionSensitivity.coerceIn(0, 100),

@@ -33,3 +33,15 @@ fun formatDuration(ms: Long): String {
 /** Wall-clock milliseconds to a local date and time string. */
 fun formatDateTime(ms: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(ms))
+
+/** 180 -> "3 min", 5400 -> "1 h 30 min", 45 -> "45 s". */
+fun formatMinutes(seconds: Int): String {
+    if (seconds < 60) return "$seconds s"
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    return when {
+        h == 0 -> "$m min"
+        m == 0 -> "$h h"
+        else -> "$h h $m min"
+    }
+}
