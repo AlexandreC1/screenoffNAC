@@ -18,6 +18,7 @@ data class RecorderConfig(
     val cameraFacing: CameraFacing = CameraFacing.BACK,
     val quality: VideoQuality = VideoQuality.HD,
     val audioEnabled: Boolean = true,
+    /** Length of each file. 0 means no limit: one file until recording stops. */
     val segmentLengthSec: Int = 180,
     val capBytes: Long = 4L shl 30,
     val freeSpaceFloorBytes: Long = 500L shl 20,
@@ -27,8 +28,11 @@ data class RecorderConfig(
     val postRollSec: Int = 10,
     val lowBatteryStopPercent: Int = 10,
 ) {
+    /** Seconds to plan storage for. A file with no limit is planned as a full day. */
+    val planningSegmentSec: Int get() = if (segmentLengthSec <= 0) 24 * 3600 else segmentLengthSec
+
     fun sanitized(): RecorderConfig = copy(
-        segmentLengthSec = segmentLengthSec.coerceIn(30, 24 * 3600),
+        segmentLengthSec = if (segmentLengthSec <= 0) 0 else segmentLengthSec.coerceIn(30, 7 * 24 * 3600),
         capBytes = capBytes.coerceAtLeast(100L shl 20),
         freeSpaceFloorBytes = freeSpaceFloorBytes.coerceAtLeast(100L shl 20),
         motionSensitivity = motionSensitivity.coerceIn(0, 100),

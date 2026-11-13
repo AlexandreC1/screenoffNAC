@@ -124,28 +124,35 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         Section("Length of each file") {
             Text(
                 "Recording never stops by itself. This only sets how long each video file is before a new one starts. " +
-                    "Pick a length or type any number of minutes, up to 1440 (24 hours).",
+                    "Pick a length, type any number of minutes, or choose No limit for one single file until you press Stop.",
                 style = MaterialTheme.typography.bodySmall,
             )
             ChoiceRow(
-                options = listOf(1, 3, 5, 10, 30, 60, 120).map { formatMinutes(it * 60) to it * 60 },
+                options = listOf("No limit" to 0) + listOf(1, 3, 5, 10, 30, 60, 120).map { formatMinutes(it * 60) to it * 60 },
                 selected = config.segmentLengthSec,
                 onSelect = { v -> Graph.config.update { it.copy(segmentLengthSec = v) } },
             )
             NumberField(
                 label = "Minutes per file",
                 current = config.segmentLengthSec / 60,
-                range = 1..1440,
+                range = 1..10080,
                 onValid = { v -> Graph.config.update { it.copy(segmentLengthSec = v * 60) } },
             )
             val audioBps = if (config.audioEnabled) 128_000 else 0
-            val fileBytes = (config.quality.bitrateBps + audioBps).toLong() / 8L * config.segmentLengthSec
+            val bytesPerSec = (config.quality.bitrateBps + audioBps).toLong() / 8L
+            val fileBytes = bytesPerSec * config.planningSegmentSec
             Text(
-                "One file will be about ${formatBytes(fileBytes)}. If the phone restarts or the app is closed by the " +
+                (if (config.segmentLengthSec <= 0) "With no limit, one hour is about ${formatBytes(bytesPerSec * 3600)}."
+                else "One file will be about ${formatBytes(fileBytes)}.") + " If the phone restarts or the app is closed by the " +
                     "system during a recording, the file in progress is lost, so very long files are riskier.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (fileBytes > config.capBytes) {
+            if (config.segmentLengthSec <= 0) {
+                Text(
+                    "With no limit, the storage limit is only applied before a recording starts. The recording itself continues until you stop it or the phone runs out of space.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else if (fileBytes > config.capBytes) {
                 Text(
                     "This is larger than your storage limit below. Raise the limit, or older clips will all be removed to make room.",
                     style = MaterialTheme.typography.bodySmall,
@@ -270,7 +277,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
 /** Free numeric entry. Applies as soon as the typed value is inside [range]. */
 @Composable
 private fun NumberField(label: String, current: Int, range: IntRange, onValid: (Int) -> Unit) {
-    var text by remember(current) { mutableStateOf(current.toString()) }
+    var text by remember(current) { mutableStateOf(if (current <= 0) "" else current.toString()) }
     OutlinedTextField(
         value = text,
         onValueChange = { typed ->
@@ -280,7 +287,7 @@ private fun NumberField(label: String, current: Int, range: IntRange, onValid: (
         },
         label = { Text(label) },
         singleLine = true,
-        isError = text.toIntOrNull()?.let { it !in range } ?: true,
+        isError = text.toIntOrNull()?.let { it !in range } ?: false,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
 }

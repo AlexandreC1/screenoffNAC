@@ -59,6 +59,8 @@ class CameraController(private val context: Context, private val owner: Lifecycl
     private var selector: CameraSelector? = null
     private var analysis: ImageAnalysis? = null
     private val resetDetector = AtomicBoolean(false)
+    private val prefs = context.getSharedPreferences("camera", Context.MODE_PRIVATE)
+    private var facing: CameraFacing? = null
 
     data class MotionStats(val frames: Int, val changed: Int, val needed: Int, val split: Boolean)
 
@@ -101,6 +103,7 @@ class CameraController(private val context: Context, private val owner: Lifecycl
         val capture = VideoCapture.withOutput(recorder)
 
         this.selector = selector
+        facing = config.cameraFacing
         videoCapture = capture
         splitMode = false
         analysis = null
@@ -113,6 +116,10 @@ class CameraController(private val context: Context, private val owner: Lifecycl
             val a = buildAnalysis(config, onMotion)
             analysis = a
             try {
+                // Some phones accept this combination and then fail to start it. Once seen, skip it.
+                if (prefs.getBoolean(KEY_SPLIT + config.cameraFacing.name, false)) {
+                    throw IllegalStateException("known not to work on this camera")
+                }
                 p.bindToLifecycle(owner, selector, capture, a)
                 Diag.log("camera bound: video + analysis together, sensitivity ${config.motionSensitivity}")
             } catch (e: Exception) {
@@ -140,6 +147,7 @@ class CameraController(private val context: Context, private val owner: Lifecycl
         splitMode = true
         resetDetector.set(true)
         openedAtMs = SystemClock.elapsedRealtime()
+        facing?.let { prefs.edit().putBoolean(KEY_SPLIT + it.name, true).apply() }
         return true
     }
 
@@ -255,5 +263,6 @@ class CameraController(private val context: Context, private val owner: Lifecycl
 
     private companion object {
         const val ANALYSIS_INTERVAL_MS = 200L
+        const val KEY_SPLIT = "split_"
     }
 }

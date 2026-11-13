@@ -271,7 +271,8 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "New file every ${formatMinutes(config.segmentLengthSec)}. Recording itself has no time limit.",
+                    if (config.segmentLengthSec <= 0) "One single file until you press Stop, no time limit."
+                    else "New file every ${formatMinutes(config.segmentLengthSec)}. Recording itself has no time limit.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text("Change these in the Settings tab.", style = MaterialTheme.typography.bodySmall)

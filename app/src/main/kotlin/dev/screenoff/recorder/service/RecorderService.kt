@@ -57,6 +57,7 @@ class RecorderService : LifecycleService() {
     private var cameraOpen = false
     private var tickCount = 0
     private var motionStats: CameraController.MotionStats? = null
+    private var segmentStartMonoMs = 0L
 
     private var segmentStartWallMs: Long? = null
     private var lockCurrent = false
@@ -101,7 +102,7 @@ class RecorderService : LifecycleService() {
                     val mode = runCatching { RecMode.valueOf(intent?.getStringExtra(Actions.EXTRA_MODE) ?: "") }
                         .getOrDefault(config.mode)
                     events.trySend(
-                        Event.Start(mode, now(), config.segmentLengthSec * 1000L, config.postRollSec * 1000L)
+                        Event.Start(mode, now(), segmentLengthMs(), config.postRollSec * 1000L)
                     )
                 }
             }
@@ -171,6 +172,10 @@ class RecorderService : LifecycleService() {
                 }
             }
         }
+        // Split mode cannot watch while it records, so keep each clip going for a while.
+        if (stats.split && machine.state == RecState.RECORDING && nowMs - segmentStartMonoMs < SPLIT_MIN_CLIP_MS) {
+            events.trySend(Event.Motion(nowMs))
+        }
         if (tickCount % 10 == 0) {
             Diag.log("motion stats state=${machine.state} frames=${stats.frames} changed=${stats.changed} needed=${stats.needed} split=${stats.split}")
         }
@@ -208,7 +213,7 @@ class RecorderService : LifecycleService() {
         if (!cameraOpen) return // Opening failed and a Fail event is already queued. Do not evict anything.
         val audioBps = if (config.audioEnabled) 128_000 else 0
         // A clip longer than the whole cap is the owner's choice: make all the room there is, then record.
-        val nextBytes = EvictionPolicy.estimateSegmentBytes(config.quality.bitrateBps + audioBps, config.segmentLengthSec)
+        val nextBytes = EvictionPolicy.estimateSegmentBytes(config.quality.bitrateBps + audioBps, config.planningSegmentSec)
             .coerceAtMost(config.capBytes)
 
         // Wait for clips still being moved into the library so the index is complete.
@@ -233,7 +238,12 @@ class RecorderService : LifecycleService() {
         val started = camera.startRecording(file, config.audioEnabled) { result ->
             onSegmentClosed(file, mode, startedWall, result)
         }
-        if (started) segmentStartWallMs = startedWall else fail("Recording could not start")
+        if (started) {
+            segmentStartWallMs = startedWall
+            segmentStartMonoMs = now()
+        } else {
+            fail("Recording could not start")
+        }
     }
 
     /** Deletes the oldest unlocked clips until the next segment fits. Runs on the file thread. */
@@ -352,7 +362,12 @@ class RecorderService : LifecycleService() {
 
     private fun now(): Long = SystemClock.elapsedRealtime()
 
+    /** 0 in the settings means no limit: one file until recording stops. */
+    private fun segmentLengthMs(): Long =
+        if (config.segmentLengthSec <= 0) Long.MAX_VALUE / 4 else config.segmentLengthSec * 1000L
+
     private companion object {
         const val NO_FRAMES_LIMIT_MS = 4_000L
+        const val SPLIT_MIN_CLIP_MS = 20_000L
     }
 }

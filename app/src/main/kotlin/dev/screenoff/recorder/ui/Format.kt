@@ -36,6 +36,7 @@ fun formatDateTime(ms: Long): String =
 
 /** 180 -> "3 min", 5400 -> "1 h 30 min", 45 -> "45 s". */
 fun formatMinutes(seconds: Int): String {
+    if (seconds <= 0) return "No limit"
     if (seconds < 60) return "$seconds s"
     val h = seconds / 3600
     val m = (seconds % 3600) / 60
