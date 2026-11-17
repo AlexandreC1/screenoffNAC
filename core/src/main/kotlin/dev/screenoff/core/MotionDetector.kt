@@ -51,8 +51,12 @@ class MotionDetector(
         if (width < gridW || height < gridH) return false
         fillGrid(luma, width, height, rowStride)
         frames++
-        if (frames == 1) {
+        // A camera that just started is still adjusting exposure and focus. Follow it fully
+        // for a few seconds instead of treating the adjustment as movement.
+        if (frames <= WARMUP_FRAMES) {
             current.copyInto(background)
+            consecutive = 0
+            lastChangedCells = 0
             return false
         }
 
@@ -80,10 +84,6 @@ class MotionDetector(
             background[i] += alpha * diffs[i]
         }
 
-        if (frames <= WARMUP_FRAMES) {
-            consecutive = 0
-            return false
-        }
         consecutive = if (changed >= minChangedCells) consecutive + 1 else 0
         return consecutive >= CONSECUTIVE_FRAMES
     }
@@ -122,7 +122,7 @@ class MotionDetector(
     private companion object {
         const val ALPHA_STILL = 0.1f
         const val ALPHA_CHANGED = 0.03f
-        const val WARMUP_FRAMES = 5
+        const val WARMUP_FRAMES = 15
         const val CONSECUTIVE_FRAMES = 2
 
         fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t

@@ -23,7 +23,7 @@ class MotionDetectorTest {
         return buf
     }
 
-    private fun warm(d: MotionDetector) = repeat(10) { assertFalse(d.analyze(frame(), w, h, w)) }
+    private fun warm(d: MotionDetector) = repeat(20) { assertFalse(d.analyze(frame(), w, h, w)) }
 
     @Test
     fun staticSceneWithNoiseNeverTriggers() {
@@ -38,6 +38,14 @@ class MotionDetectorTest {
         var triggered = false
         for (i in 0 until 6) if (d.analyze(frame(blockX = 20 + i * 30), w, h, w)) triggered = true
         assertTrue(triggered)
+    }
+
+    @Test
+    fun cameraStartupExposureSettlingDoesNotTrigger() {
+        // Seen on a Xiaomi: the picture brightens over the first second or two after the camera starts.
+        val d = MotionDetector(sensitivity = 100)
+        for (i in 0 until 12) assertFalse(d.analyze(frame(base = 30 + i * 8), w, h, w))
+        for (i in 0 until 40) assertFalse(d.analyze(frame(base = 126), w, h, w))
     }
 
     @Test

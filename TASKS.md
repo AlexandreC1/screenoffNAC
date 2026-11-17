@@ -92,6 +92,12 @@ Acceptance (owner): phone on a shelf in motion mode, nothing recorded for 5 quie
 
 Newest entry first. Format is in `AGENTS.md` section 10.
 
+### 2026-11-17, Claude, ENGINE
+First real-phone motion test (Xiaomi 25098RA98G, HyperOS, Android 16): the camera accepts video + analysis together but never delivers analysis images ("Unsupported set of inputs/outputs"). The 4 s watchdog switched to split mode, the switch is now remembered per camera, motion was detected and clips saved with sound (audio state 0 = active).
+Bug found in the same log: camera start-up exposure settling (picture brightening over 1 to 2 s) was read as movement, which in split mode can chain clips forever because every clip ends with a camera restart. Fix: 15-frame warmup (about 3 s) that follows the picture fully. New unit test reproduces the pattern.
+Phone testing: Xiaomi blocks input injection over adb (INJECT_EVENTS) unless "USB debugging (Security settings)" is on, so `scripts`-style taps do not work there; the owner presses the buttons. `pm grant` is blocked for the same reason.
+Not verified yet: the warmup fix on the phone, an armed phone left alone for minutes (no false clips).
+
 ### 2026-11-11 (later), Claude, ENGINE
 Owner report: motion mode never records on his phone. Continuous recording worked.
 Likely cause: the phone takes the combined path (video + analysis bound together), which the emulators never exercise because their cameras force the split fallback.
