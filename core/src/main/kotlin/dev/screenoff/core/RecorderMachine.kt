@@ -15,6 +15,8 @@ class RecorderMachine {
         /** The current segment file is closed. [failed] means the recorder stopped on its own with an error. */
         data class SegmentFinalized(val nowMs: Long, val failed: Boolean = false, val reason: String? = null) : Event
         data class Fail(val nowMs: Long, val reason: String) : Event
+        /** Change mode while running, for example from another device. The camera stays open. */
+        data class Switch(val mode: RecMode, val nowMs: Long) : Event
     }
 
     sealed interface Effect {
@@ -26,7 +28,7 @@ class RecorderMachine {
         data class Finish(val error: String?) : Effect
     }
 
-    private enum class Pending { ROTATE, QUIET, STOP }
+    private enum class Pending { ROTATE, QUIET, STOP, SWITCH }
 
     var state: RecState = RecState.IDLE
         private set
@@ -42,6 +44,7 @@ class RecorderMachine {
     private var pending: Pending? = null
     private var motionWhilePending = false
     private var finalizingSinceMs = 0L
+    private var nextMode: RecMode? = null
 
     fun on(event: Event): List<Effect> = when (event) {
         is Event.Start -> onStart(event)
@@ -50,6 +53,7 @@ class RecorderMachine {
         is Event.Tick -> onTick(event.nowMs)
         is Event.SegmentFinalized -> onFinalized(event)
         is Event.Fail -> onFail(event)
+        is Event.Switch -> onSwitch(event)
     }
 
     private fun onStart(e: Event.Start): List<Effect> {
@@ -66,10 +70,39 @@ class RecorderMachine {
                 segmentStartMs = e.nowMs
                 listOf(Effect.OpenCamera(e.mode), Effect.StartSegment)
             }
-            RecMode.MOTION -> {
+            RecMode.MOTION, RecMode.STANDBY -> {
                 state = RecState.ARMED
                 listOf(Effect.OpenCamera(e.mode))
             }
+        }
+    }
+
+    private fun onSwitch(e: Event.Switch): List<Effect> {
+        if (e.mode == mode) return emptyList()
+        return when (state) {
+            RecState.ARMED -> enter(e.mode, e.nowMs)
+            RecState.RECORDING -> {
+                if (pending == Pending.STOP) return emptyList()
+                val alreadyStopping = pending != null
+                pending = Pending.SWITCH
+                nextMode = e.mode
+                motionWhilePending = false
+                if (alreadyStopping) emptyList() else listOf(Effect.StopSegment)
+            }
+            else -> emptyList()
+        }
+    }
+
+    /** Enter [m] with the camera already open and no segment being written. */
+    private fun enter(m: RecMode, nowMs: Long): List<Effect> {
+        mode = m
+        return if (m == RecMode.CONTINUOUS) {
+            state = RecState.RECORDING
+            segmentStartMs = nowMs
+            listOf(Effect.StartSegment)
+        } else {
+            state = RecState.ARMED
+            emptyList()
         }
     }
 
@@ -124,6 +157,11 @@ class RecorderMachine {
         pending = null
         return when (p) {
             Pending.STOP -> toIdle()
+            Pending.SWITCH -> {
+                val m = nextMode ?: RecMode.STANDBY
+                nextMode = null
+                enter(m, e.nowMs)
+            }
             Pending.ROTATE -> {
                 segmentStartMs = e.nowMs
                 listOf(Effect.StartSegment)
@@ -169,6 +207,7 @@ class RecorderMachine {
         state = RecState.IDLE
         mode = null
         pending = null
+        nextMode = null
         motionWhilePending = false
         return listOf(Effect.CloseCamera, Effect.Finish(error))
     }

@@ -132,6 +132,55 @@ grep -q '"sizeBytes":0[,}]' "$OUT/segments_after_motion.json" && fail "a motion 
 adb shell ls -la $MOVIES/motion/ 2>/dev/null
 [ "$(adb shell ls $MOVIES/staging/ 2>/dev/null | wc -l)" -eq 0 ] || fail "staging folder is not empty after motion stop"
 
+say "remote viewing: standby, PIN, live stream, switch to recording and back"
+CLIPS_BEFORE=$(adb shell "run-as $PKG cat files/segments.json" 2>/dev/null | grep -o '"id"' | wc -l)
+adb shell am force-stop $PKG
+printf "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <int name=\"segmentLengthSec\" value=\"30\" />\n    <string name=\"mode\">STANDBY</string>\n    <int name=\"configVersion\" value=\"2\" />\n    <boolean name=\"audioEnabled\" value=\"true\" />\n    <boolean name=\"remoteEnabled\" value=\"true\" />\n    <string name=\"remotePin\">246810</string>\n</map>\n" \
+  | adb shell "run-as $PKG sh -c 'cat > shared_prefs/config.xml'"
+adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard >/dev/null 2>&1
+adb shell am start -W -n "$PKG/.ui.MainActivity" >/dev/null
+sleep 6
+adb exec-out screencap -p > "$OUT/home_standby.png" 2>/dev/null
+tap_text START || fail "START button not found for standby"
+wait_fg || fail "standby did not start the service"
+adb forward tcp:8090 tcp:8090
+sleep 4
+JAR="$OUT/cookies.txt"; U=http://127.0.0.1:8090
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$U/api/status"); echo "status without login: $CODE"
+[ "$CODE" = "401" ] || fail "status page is reachable without the PIN"
+CODE=$(curl -s -o "$OUT/wrong.html" -w "%{http_code}" -d "pin=000000" "$U/login"); echo "wrong pin: $CODE"
+grep -q "Wrong PIN" "$OUT/wrong.html" || fail "wrong PIN was not refused"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -c "$JAR" -d "pin=246810" "$U/login"); echo "right pin: $CODE"
+[ "$CODE" = "302" ] || fail "right PIN did not log in"
+ST=$(curl -s -b "$JAR" "$U/api/status"); echo "$ST"
+echo "$ST" | grep -q '"mode":"STANDBY"' || fail "not in standby"
+curl -s -b "$JAR" "$U/" | grep -q "live.mjpg" || fail "dashboard page missing"
+count_frames() { curl -s -b "$JAR" --max-time 6 "$U/live.mjpg" -o "$1"; grep -a -c "Content-Type: image/jpeg" "$1"; }
+F1=$(count_frames "$OUT/live_standby.bin"); echo "live frames in 6 s, standby: $F1"
+[ "$F1" -ge 10 ] || fail "live view too slow or missing in standby ($F1 frames)"
+curl -s -b "$JAR" -o "$OUT/snap.jpg" "$U/snap.jpg"
+head -c 3 "$OUT/snap.jpg" | od -An -tx1 | grep -q "ff d8 ff" || fail "snapshot is not a JPEG"
+curl -s -b "$JAR" -X POST "$U/api/mode?m=CONTINUOUS" >/dev/null
+sleep 8
+ST=$(curl -s -b "$JAR" "$U/api/status"); echo "$ST"
+echo "$ST" | grep -q '"state":"RECORDING"' || fail "remote switch to recording did not record"
+F2=$(count_frames "$OUT/live_recording.bin"); echo "live frames in 6 s, while recording: $F2"
+[ "$F2" -ge 10 ] || fail "live view missing while recording ($F2 frames)"
+curl -s -b "$JAR" -X POST "$U/api/mode?m=STANDBY" >/dev/null
+sleep 10
+ST=$(curl -s -b "$JAR" "$U/api/status"); echo "$ST"
+echo "$ST" | grep -q '"state":"ARMED"' || fail "remote switch back to standby failed"
+svc | grep -q "isForeground=true" || fail "service stopped after remote switching"
+CLIPS_AFTER=$(adb shell "run-as $PKG cat files/segments.json" 2>/dev/null | grep -o '"id"' | wc -l)
+echo "clips before $CLIPS_BEFORE, after $CLIPS_AFTER"
+[ "$CLIPS_AFTER" -gt "$CLIPS_BEFORE" ] || fail "the remotely started recording was not saved"
+adb logcat -d -s ScreenOff:V | grep -E "preview tap|first preview frame|one-at-a-time|remote" | tail -8
+adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard >/dev/null 2>&1
+adb shell am start -W -n "$PKG/.ui.MainActivity" >/dev/null; sleep 3
+tap_text STOP || fail "STOP button not found after remote test"
+sleep 10
+svc | grep -q "ServiceRecord" && fail "service still running after STOP"
+
 say "app log"
 applog 60
 

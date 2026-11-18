@@ -26,6 +26,8 @@ import dev.screenoff.recorder.Actions
 import dev.screenoff.recorder.Diag
 import dev.screenoff.recorder.Graph
 import dev.screenoff.recorder.RecorderBus
+import dev.screenoff.recorder.remote.RemoteBridge
+import dev.screenoff.recorder.remote.RemoteServer
 import dev.screenoff.recorder.triggers.Triggers
 import java.io.File
 import kotlinx.coroutines.Job
@@ -64,11 +66,30 @@ class RecorderService : LifecycleService() {
     private val publishJobs = ArrayList<Job>()
 
     private var thermalListener: PowerManager.OnThermalStatusChangedListener? = null
+    private var remote: RemoteServer? = null
 
     override fun onCreate() {
         super.onCreate()
         camera = CameraController(this, this)
         lifecycleScope.launch { for (e in events) handle(e) }
+        RemoteBridge.sink = { command ->
+            lifecycleScope.launch {
+                when (command) {
+                    is RemoteBridge.Command.Mode -> {
+                        Diag.log("remote command: mode ${command.mode}")
+                        events.trySend(Event.Switch(command.mode, now()))
+                    }
+                    RemoteBridge.Command.Keep -> {
+                        if (machine.state == RecState.RECORDING) {
+                            Diag.log("remote command: keep this clip")
+                            lockCurrent = true
+                            publishStatus()
+                        }
+                    }
+                }
+                Unit
+            }
+        }
         lifecycleScope.launch {
             while (isActive) {
                 delay(1000)
@@ -104,6 +125,7 @@ class RecorderService : LifecycleService() {
                     events.trySend(
                         Event.Start(mode, now(), segmentLengthMs(), config.postRollSec * 1000L)
                     )
+                    startRemote()
                 }
             }
             Actions.STOP -> {
@@ -147,7 +169,10 @@ class RecorderService : LifecycleService() {
                 fail("The camera could not go back to watching: ${e.message ?: e.javaClass.simpleName}")
             }
         }
-        if (event is Event.Tick && machine.mode == RecMode.MOTION && machine.state != RecState.IDLE) {
+        val mode = machine.mode
+        if (cameraOpen && mode != null) camera.setMode(mode)
+        if (event is Event.Tick && cameraOpen && machine.state != RecState.IDLE) cameraTick(event.nowMs)
+        if (event is Event.Tick && mode == RecMode.MOTION && machine.state != RecState.IDLE) {
             motionTick(event.nowMs)
             if (effects.isEmpty()) publishStatus(surfaces = false)
         }
@@ -155,23 +180,27 @@ class RecorderService : LifecycleService() {
         if (effects.isNotEmpty() || event !is Event.Tick) publishStatus()
     }
 
-    /** Motion mode, once a second: refresh the meter, and repair a camera that sends no images. */
+    /** Every mode, once a second: switch to the fallback if the preview tap delivers nothing. */
+    private fun cameraTick(nowMs: Long) {
+        val mode = machine.mode ?: return
+        if (machine.state != RecState.ARMED || !camera.usingTap || camera.isRecording) return
+        val silentFor = nowMs - maxOf(camera.openedAtMs, camera.lastFrameAtMs)
+        if (silentFor > NO_FRAMES_LIMIT_MS) {
+            Diag.log("no preview frames for $silentFor ms, switching to one-at-a-time mode (no live view)")
+            try {
+                camera.fallbackFromTap(mode)
+            } catch (e: Exception) {
+                Diag.log("fallback failed", e)
+                fail("The camera could not start watching: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
+    }
+
+    /** Motion mode, once a second: refresh the meter. */
     private fun motionTick(nowMs: Long) {
         if (!cameraOpen) return
         val stats = camera.motionStats()
         motionStats = stats
-        if (machine.state == RecState.ARMED && !stats.split) {
-            val silentFor = nowMs - maxOf(camera.openedAtMs, camera.lastFrameAtMs)
-            if (silentFor > NO_FRAMES_LIMIT_MS) {
-                Diag.log("no analysis images for $silentFor ms with video + analysis together, switching to split mode")
-                try {
-                    camera.fallbackToSplit()
-                } catch (e: Exception) {
-                    Diag.log("split mode fallback failed", e)
-                    fail("The camera could not start watching: ${e.message ?: e.javaClass.simpleName}")
-                }
-            }
-        }
         // Split mode cannot watch while it records, so keep each clip going for a while.
         if (stats.split && machine.state == RecState.RECORDING && nowMs - segmentStartMonoMs < SPLIT_MIN_CLIP_MS) {
             events.trySend(Event.Motion(nowMs))
@@ -348,7 +377,24 @@ class RecorderService : LifecycleService() {
         wakeLock = null
     }
 
+    private fun startRemote() {
+        if (!config.remoteEnabled || config.remotePin.isEmpty() || remote != null) return
+        val server = RemoteServer(applicationContext, config.remotePin)
+        remote = server
+        Thread({
+            try {
+                server.start()
+            } catch (e: Exception) {
+                Diag.log("remote viewing could not start", e)
+                Notifier.error(this, "Remote viewing could not start: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }, "remote-start").start()
+    }
+
     override fun onDestroy() {
+        RemoteBridge.sink = null
+        remote?.stop()
+        remote = null
         if (Build.VERSION.SDK_INT >= 29) {
             thermalListener?.let { getSystemService(PowerManager::class.java).removeThermalStatusListener(it) }
         }
@@ -367,7 +413,7 @@ class RecorderService : LifecycleService() {
         if (config.segmentLengthSec <= 0) Long.MAX_VALUE / 4 else config.segmentLengthSec * 1000L
 
     private companion object {
-        const val NO_FRAMES_LIMIT_MS = 4_000L
+        const val NO_FRAMES_LIMIT_MS = 5_000L
         const val SPLIT_MIN_CLIP_MS = 20_000L
     }
 }

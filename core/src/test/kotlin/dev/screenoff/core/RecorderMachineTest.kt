@@ -149,4 +149,69 @@ class RecorderMachineTest {
         assertTrue(m.on(Event.Fail(1, "x")).isEmpty())
         assertTrue(m.on(Event.SegmentFinalized(1)).isEmpty())
     }
+
+    @Test
+    fun standbyArmsWithoutRecordingAndIgnoresMotion() {
+        val m = RecorderMachine()
+        assertEquals(listOf(Effect.OpenCamera(RecMode.STANDBY)), m.on(start(RecMode.STANDBY)))
+        assertEquals(RecState.ARMED, m.state)
+        assertTrue(m.on(Event.Motion(1_000)).isEmpty())
+        assertTrue(m.on(Event.Tick(60_000)).isEmpty())
+    }
+
+    @Test
+    fun switchFromStandbyToContinuousStartsRecordingWithoutReopeningTheCamera() {
+        val m = RecorderMachine()
+        m.on(start(RecMode.STANDBY))
+        assertEquals(listOf(Effect.StartSegment), m.on(Event.Switch(RecMode.CONTINUOUS, 5_000)))
+        assertEquals(RecState.RECORDING, m.state)
+        assertEquals(RecMode.CONTINUOUS, m.mode)
+    }
+
+    @Test
+    fun switchWhileRecordingFinishesTheClipThenEntersTheNewMode() {
+        val m = RecorderMachine()
+        m.on(start(RecMode.CONTINUOUS))
+        assertEquals(listOf(Effect.StopSegment), m.on(Event.Switch(RecMode.STANDBY, 5_000)))
+        assertTrue("no rotation while switching", m.on(Event.Tick(61_000)).isEmpty())
+        assertTrue(m.on(Event.SegmentFinalized(5_200)).isEmpty())
+        assertEquals(RecState.ARMED, m.state)
+        assertEquals(RecMode.STANDBY, m.mode)
+        assertTrue(m.on(Event.Motion(6_000)).isEmpty())
+    }
+
+    @Test
+    fun switchToMotionThenMotionRecords() {
+        val m = RecorderMachine()
+        m.on(start(RecMode.STANDBY))
+        assertTrue(m.on(Event.Switch(RecMode.MOTION, 1_000)).isEmpty())
+        assertEquals(listOf(Effect.StartSegment), m.on(Event.Motion(2_000)))
+    }
+
+    @Test
+    fun switchDuringRotationUsesTheSameFinalize() {
+        val m = RecorderMachine()
+        m.on(start(RecMode.CONTINUOUS))
+        assertEquals(listOf(Effect.StopSegment), m.on(Event.Tick(60_000)))
+        assertTrue(m.on(Event.Switch(RecMode.STANDBY, 60_100)).isEmpty())
+        assertTrue(m.on(Event.SegmentFinalized(60_300)).isEmpty())
+        assertEquals(RecState.ARMED, m.state)
+    }
+
+    @Test
+    fun stopAfterSwitchStillStops() {
+        val m = RecorderMachine()
+        m.on(start(RecMode.CONTINUOUS))
+        m.on(Event.Switch(RecMode.STANDBY, 1_000))
+        m.on(Event.Stop(1_100))
+        assertEquals(listOf(Effect.CloseCamera, Effect.Finish(null)), m.on(Event.SegmentFinalized(1_300)))
+    }
+
+    @Test
+    fun switchIsIgnoredWhenIdleOrToTheSameMode() {
+        val m = RecorderMachine()
+        assertTrue(m.on(Event.Switch(RecMode.CONTINUOUS, 1)).isEmpty())
+        m.on(start(RecMode.MOTION))
+        assertTrue(m.on(Event.Switch(RecMode.MOTION, 2)).isEmpty())
+    }
 }

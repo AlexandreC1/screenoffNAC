@@ -43,6 +43,7 @@ import dev.screenoff.core.VideoQuality
 import androidx.core.content.FileProvider
 import dev.screenoff.recorder.Diag
 import dev.screenoff.recorder.Graph
+import dev.screenoff.recorder.remote.RemoteServer
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -228,6 +229,31 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 selected = config.lowBatteryStopPercent,
                 onSelect = { v -> Graph.config.update { it.copy(lowBatteryStopPercent = v) } },
             )
+        }
+
+        Section("Remote viewing") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Watch live from another device", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = config.remoteEnabled,
+                    onCheckedChange = { on ->
+                        Graph.config.update {
+                            it.copy(remoteEnabled = on, remotePin = it.remotePin.ifEmpty { RemoteServer.newPin() })
+                        }
+                    },
+                )
+            }
+            Text(
+                "Install Tailscale on this phone and on the device you watch from, signed in to the same account. " +
+                    "The page is protected by this PIN. Changes apply the next time you press START.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (config.remoteEnabled) {
+                Text("PIN ${config.remotePin}", style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(onClick = { Graph.config.update { it.copy(remotePin = RemoteServer.newPin()) } }) {
+                    Text("New PIN")
+                }
+            }
         }
 
         Section("Diagnostics") {

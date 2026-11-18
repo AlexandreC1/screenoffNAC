@@ -29,6 +29,8 @@ class ConfigStore(context: Context) {
             .putInt(K_SENSITIVITY, next.motionSensitivity)
             .putInt(K_POSTROLL, next.postRollSec)
             .putInt(K_BATTERY, next.lowBatteryStopPercent)
+            .putBoolean(K_REMOTE, next.remoteEnabled)
+            .putString(K_PIN, next.remotePin)
             .apply()
         _config.value = next
     }
@@ -55,6 +57,8 @@ class ConfigStore(context: Context) {
             motionSensitivity = prefs.getInt(K_SENSITIVITY, d.motionSensitivity),
             postRollSec = prefs.getInt(K_POSTROLL, d.postRollSec),
             lowBatteryStopPercent = prefs.getInt(K_BATTERY, d.lowBatteryStopPercent),
+            remoteEnabled = prefs.getBoolean(K_REMOTE, d.remoteEnabled),
+            remotePin = prefs.getString(K_PIN, null) ?: d.remotePin,
         ).sanitized()
     }
 
@@ -74,5 +78,7 @@ class ConfigStore(context: Context) {
         const val K_POSTROLL = "postRollSec"
         const val K_BATTERY = "lowBatteryStopPercent"
         const val K_VERSION = "configVersion"
+        const val K_REMOTE = "remoteEnabled"
+        const val K_PIN = "remotePin"
     }
 }

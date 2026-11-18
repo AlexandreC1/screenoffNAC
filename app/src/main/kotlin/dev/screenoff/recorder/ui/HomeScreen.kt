@@ -46,6 +46,7 @@ import dev.screenoff.core.CameraFacing
 import dev.screenoff.core.RecMode
 import dev.screenoff.core.RecState
 import dev.screenoff.recorder.Graph
+import dev.screenoff.recorder.remote.RemoteServer
 import dev.screenoff.recorder.RecorderBus
 import dev.screenoff.recorder.triggers.Permissions
 import dev.screenoff.recorder.triggers.Triggers
@@ -259,6 +260,44 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                 enabled = !running,
                 onClick = { Graph.config.update { it.copy(mode = RecMode.MOTION) } },
             )
+            ModeCard(
+                title = "Standby for remote viewing",
+                description = "Camera ready, nothing recorded. Watch live and choose a mode from your other device.",
+                selected = config.mode == RecMode.STANDBY,
+                enabled = !running,
+                onClick = { Graph.config.update { it.copy(mode = RecMode.STANDBY) } },
+            )
+        }
+
+        // Remote viewing at a glance
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Remote viewing", style = MaterialTheme.typography.titleMedium)
+                if (!config.remoteEnabled) {
+                    Text("Off. Turn it on in Settings to watch live from another device.", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    val addresses = remember(running) { RemoteServer.addresses() }
+                    val tailscale = addresses.firstOrNull { it.startsWith("100.") }
+                    if (tailscale != null) {
+                        Text("On your other device open:", style = MaterialTheme.typography.bodyMedium)
+                        Text("http://$tailscale:${RemoteServer.PORT}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Text(
+                            "Tailscale is not connected on this phone. Open the Tailscale app and turn it on.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        addresses.firstOrNull()?.let {
+                            Text("Same Wi-Fi only: http://$it:${RemoteServer.PORT}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Text("PIN ${config.remotePin}", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (running) "The page works while the app is running here." else "Press START (Standby is a good choice) for the page to work.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
 
         // Current setup at a glance

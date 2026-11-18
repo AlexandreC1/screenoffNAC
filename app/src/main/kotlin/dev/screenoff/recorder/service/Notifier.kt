@@ -39,7 +39,9 @@ object Notifier {
             RecState.RECORDING ->
                 if (status.mode == RecMode.MOTION) context.getString(R.string.notif_recording_motion)
                 else context.getString(R.string.notif_recording)
-            RecState.ARMED -> context.getString(R.string.notif_armed)
+            RecState.ARMED ->
+                if (status.mode == RecMode.STANDBY) context.getString(R.string.notif_standby)
+                else context.getString(R.string.notif_armed)
             RecState.FINALIZING -> context.getString(R.string.notif_saving)
             RecState.IDLE -> context.getString(R.string.notif_starting)
         }
@@ -52,7 +54,7 @@ object Notifier {
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openApp(context))
             .addAction(0, context.getString(R.string.action_stop), servicePending(context, Actions.STOP, 10))
-        if (status.state == RecState.ARMED) {
+        if (status.state == RecState.ARMED && status.mode == RecMode.MOTION) {
             builder.setContentText(
                 if (status.motionFrames == 0) context.getString(R.string.notif_waiting_images)
                 else context.getString(R.string.notif_meter, status.motionChanged, status.motionNeeded)

@@ -1,6 +1,7 @@
 package dev.screenoff.core
 
-enum class RecMode { CONTINUOUS, MOTION }
+/** STANDBY keeps the camera ready for live viewing and remote commands without recording. */
+enum class RecMode { CONTINUOUS, MOTION, STANDBY }
 
 enum class RecState { IDLE, ARMED, RECORDING, FINALIZING }
 
@@ -27,6 +28,10 @@ data class RecorderConfig(
     val motionSensitivity: Int = 50,
     val postRollSec: Int = 10,
     val lowBatteryStopPercent: Int = 10,
+    /** Built-in web page for live viewing and control from another device. */
+    val remoteEnabled: Boolean = false,
+    /** PIN for the web page. Empty until remote viewing is first turned on. */
+    val remotePin: String = "",
 ) {
     /** Seconds to plan storage for. A file with no limit is planned as a full day. */
     val planningSegmentSec: Int get() = if (segmentLengthSec <= 0) 24 * 3600 else segmentLengthSec
