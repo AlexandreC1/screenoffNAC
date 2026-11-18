@@ -59,6 +59,8 @@ object Pages {
       <button id="m-MOTION" onclick="mode('MOTION')">Record when something moves</button>
       <button id="m-STANDBY" onclick="mode('STANDBY')">Watch only</button>
     </div>
+    <p><button id="listen" onclick="toggleSound()" disabled>Listen</button></p>
+    <div id="sound" class="dim"></div>
     <p><button id="keep" onclick="keep()" disabled>Keep this clip (never delete it automatically)</button></p>
     <div id="line" class="dim"></div>
   </div>
@@ -111,6 +113,12 @@ async function refresh() {
       b.disabled = s.state === 'IDLE' || s.state === 'FINALIZING';
     }
     document.getElementById('keep').disabled = s.state !== 'RECORDING';
+    soundAllowed = s.soundAllowed;
+    document.getElementById('listen').disabled = !soundAllowed && !soundOn;
+    document.getElementById('sound').textContent =
+      !s.soundAllowed ? 'Sound is off. Turn on Record sound in the app settings on the phone.'
+      : s.soundMuted ? 'Android has muted live sound while the phone records. The clip still has sound.'
+      : soundOn ? 'Listening, about half a second behind.' : '';
     const parts = [];
     if (s.state === 'IDLE') parts.push('The app is not running on the phone. Start it there in Standby to use this page.');
     if (s.battery !== null) parts.push('Battery ' + s.battery + '%' + (s.charging ? ', charging' : ', not charging'));
@@ -123,6 +131,55 @@ async function refresh() {
     document.getElementById('line').textContent = 'Cannot reach the phone. Check that Tailscale is on for both devices.';
   }
 }
+// Live sound: mu-law 16 kHz from /live.audio, played through Web Audio about 0.4 s behind.
+let audioCtx = null, soundReader = null, soundOn = false, playAt = 0, soundAllowed = false;
+const MU = new Float32Array(256);
+for (let i = 0; i < 256; i++) {
+  const u = ~i & 0xff, sign = u & 0x80, exp = (u >> 4) & 7, man = u & 0x0f;
+  let s = ((man << 3) + 0x84) << exp; s -= 0x84;
+  MU[i] = (sign ? -s : s) / 32768;
+}
+async function toggleSound() {
+  if (soundOn) { stopSound(); return; }
+  soundOn = true; document.getElementById('listen').textContent = 'Stop listening';
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  await audioCtx.resume();
+  playAt = 0;
+  try {
+    const r = await fetch('/live.audio?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) { document.getElementById('sound').textContent = await r.text(); stopSound(); return; }
+    soundReader = r.body.getReader();
+    let pending = new Uint8Array(0);
+    while (soundOn) {
+      const { value, done } = await soundReader.read();
+      if (done) break;
+      const merged = new Uint8Array(pending.length + value.length);
+      merged.set(pending); merged.set(value, pending.length);
+      const usable = merged.length - (merged.length % 1600);
+      if (usable === 0) { pending = merged; continue; }
+      playChunk(merged.subarray(0, usable));
+      pending = merged.slice(usable);
+    }
+  } catch (e) { }
+  if (soundOn) { stopSound(); document.getElementById('sound').textContent = 'Sound connection lost. Press Listen to try again.'; }
+}
+function playChunk(bytes) {
+  const buf = audioCtx.createBuffer(1, bytes.length, 16000);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < bytes.length; i++) ch[i] = MU[bytes[i]];
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf; src.connect(audioCtx.destination);
+  const now = audioCtx.currentTime;
+  if (playAt < now + 0.05 || playAt > now + 1.5) playAt = now + 0.3;
+  src.start(playAt);
+  playAt += buf.duration;
+}
+function stopSound() {
+  soundOn = false;
+  if (soundReader) { soundReader.cancel().catch(() => {}); soundReader = null; }
+  document.getElementById('listen').textContent = 'Listen';
+}
+
 async function mode(m) { await fetch('/api/mode?m=' + m, { method: 'POST' }); refresh(); }
 async function keep() { await fetch('/api/keep', { method: 'POST' }); refresh(); }
 

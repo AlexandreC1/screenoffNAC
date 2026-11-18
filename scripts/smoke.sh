@@ -158,6 +158,9 @@ curl -s -b "$JAR" "$U/" | grep -q "live.mjpg" || fail "dashboard page missing"
 count_frames() { curl -s -b "$JAR" --max-time 6 "$U/live.mjpg" -o "$1"; grep -a -c "Content-Type: image/jpeg" "$1"; }
 F1=$(count_frames "$OUT/live_standby.bin"); echo "live frames in 6 s, standby: $F1"
 [ "$F1" -ge 10 ] || fail "live view too slow or missing in standby ($F1 frames)"
+count_sound() { curl -s -b "$JAR" --max-time 5 "$U/live.audio" -o "$1"; stat -c %s "$1"; }
+S1=$(count_sound "$OUT/sound_standby.bin"); echo "live sound bytes in 5 s, standby: $S1"
+[ "$S1" -ge 40000 ] || fail "live sound missing in standby ($S1 bytes, expected about 80000)"
 curl -s -b "$JAR" -o "$OUT/snap.jpg" "$U/snap.jpg"
 head -c 3 "$OUT/snap.jpg" | od -An -tx1 | grep -q "ff d8 ff" || fail "snapshot is not a JPEG"
 curl -s -b "$JAR" -X POST "$U/api/mode?m=CONTINUOUS" >/dev/null
@@ -165,6 +168,9 @@ sleep 8
 ST=$(curl -s -b "$JAR" "$U/api/status"); echo "$ST"
 echo "$ST" | grep -q '"state":"RECORDING"' || fail "remote switch to recording did not record"
 F2=$(count_frames "$OUT/live_recording.bin"); echo "live frames in 6 s, while recording: $F2"
+S2=$(count_sound "$OUT/sound_recording.bin"); echo "live sound bytes in 5 s, while recording: $S2"
+[ "$S2" -ge 40000 ] || fail "live sound missing while recording ($S2 bytes)"
+curl -s -b "$JAR" "$U/api/status" | grep -o '"sound[A-Za-z]*":[a-z]*' | tr '\n' ' '; echo
 [ "$F2" -ge 10 ] || fail "live view missing while recording ($F2 frames)"
 curl -s -b "$JAR" -X POST "$U/api/mode?m=STANDBY" >/dev/null
 sleep 10

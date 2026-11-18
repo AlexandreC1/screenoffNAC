@@ -1,9 +1,12 @@
 package dev.screenoff.recorder.remote
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.BatteryManager
+import androidx.core.content.ContextCompat
 import dev.screenoff.core.RecMode
 import dev.screenoff.recorder.Diag
 import dev.screenoff.recorder.Graph
@@ -92,7 +95,8 @@ class RemoteServer(private val context: Context, private val pin: String, privat
         when {
             req.path == "/login" && req.method == "POST" -> login(req, out)
             !authed && req.path.startsWith("/api/") -> send(out, 401, "application/json", """{"error":"login"}""")
-            !authed && (req.path == "/live.mjpg" || req.path == "/snap.jpg") -> send(out, 401, "text/plain", "login")
+            !authed && (req.path == "/live.mjpg" || req.path == "/snap.jpg" || req.path == "/live.audio") ->
+                send(out, 401, "text/plain", "login")
             !authed -> send(out, 200, "text/html; charset=utf-8", Pages.login(error = false))
             req.path == "/" -> send(out, 200, "text/html; charset=utf-8", Pages.DASHBOARD)
             req.path == "/api/status" -> send(out, 200, "application/json", status().toString())
@@ -107,6 +111,7 @@ class RemoteServer(private val context: Context, private val pin: String, privat
             }
             req.path == "/snap.jpg" -> snapshot(out)
             req.path == "/live.mjpg" -> live(socket, out)
+            req.path == "/live.audio" -> liveAudio(socket, out)
             req.path == "/logout" -> {
                 val headers = "Set-Cookie: $COOKIE=; Path=/; Max-Age=0\r\nLocation: /\r\n"
                 send(out, 302, "text/plain", "", headers)
@@ -153,6 +158,9 @@ class RemoteServer(private val context: Context, private val pin: String, privat
             .put("usedBytes", clips.sumOf { it.sizeBytes })
             .put("capBytes", c.capBytes)
             .put("audio", c.audioEnabled)
+            .put("soundAllowed", soundAllowed())
+            .put("soundLive", AudioHub.capturing)
+            .put("soundMuted", AudioHub.silenced)
     }
 
     private fun snapshot(out: OutputStream) {
@@ -195,6 +203,44 @@ class RemoteServer(private val context: Context, private val pin: String, privat
             // Viewer closed the page.
         } finally {
             LiveHub.viewers.decrementAndGet()
+        }
+    }
+
+    private fun soundAllowed(): Boolean =
+        Graph.config.config.value.audioEnabled &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
+            RecorderBus.isRunning
+
+    /** Raw mu-law, 16 kHz mono, sent as it is captured. */
+    private fun liveAudio(socket: Socket, out: OutputStream) {
+        if (!soundAllowed()) {
+            send(out, 409, "text/plain", "Sound is off in the app settings, or the app is not running")
+            return
+        }
+        socket.soTimeout = 0
+        out.write(
+            ("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nX-Sample-Rate: ${AudioHub.SAMPLE_RATE}\r\n" +
+                "Cache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n").toByteArray()
+        )
+        out.flush()
+        var last = AudioHub.join()
+        try {
+            var idle = 0
+            while (running && RecorderBus.isRunning) {
+                val chunk = AudioHub.await(last, timeoutMs = 2_000)
+                if (chunk == null) {
+                    if (++idle > 15) break
+                    continue
+                }
+                idle = 0
+                last = chunk.first
+                out.write(chunk.second)
+                out.flush()
+            }
+        } catch (e: IOException) {
+            // Listener closed the page or pressed Stop.
+        } finally {
+            AudioHub.leave()
         }
     }
 
